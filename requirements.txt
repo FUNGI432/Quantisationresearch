@@ -1,0 +1,13 @@
+torch
+transformers
+datasets
+evaluate
+accelerate
+bitsandbytes
+peft
+sentencepiece
+lm-eval
+llmcompressor
+autoawq
+scipy
+matplotlib

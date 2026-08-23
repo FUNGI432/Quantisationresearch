@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Regenerable via prepare_data.py -- not committed (large, deterministic from code)
+data/
+
+# Trained model weights -- multi-GB each, regenerable via train_qat.py / run_matrix.py
+checkpoints/
+
+logs/
