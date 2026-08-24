@@ -1,12 +1,143 @@
-# QAT Research v2: Expanded Selective-Tensor Quantization Study
+# Selective Quantization-Aware Training on Small Language Models
 
-Rebuilt from scratch after a laptop reset wiped the original v1 code (the v1
-paper text, results, and pipeline design survive only in
-`../research paper context.txt` and the two v1 PDFs in `../`). This is the
-expansion driven by ACL Submission #173 reviewer feedback -- see
-[`docs/PLAN.md`](docs/PLAN.md) for the full reviewer-to-experiment mapping and
-[`docs/MATH.md`](docs/MATH.md) for the formal memory-scaling and STE-asymmetry
-derivations that back the paper's Discussion section.
+**A hardware-constrained study of which tensors actually need QAT: weights,
+activations, or both — and where full QAT stops fitting a 6 GB GPU at all.**
+
+This is an active undergraduate research project (Bennett University, SCSET)
+being expanded from an ACL Submission (#173) that came back with reviewer
+feedback. This README explains what the project is, what's been done, and
+exactly where it stands right now — see [`docs/reports/`](docs/reports/) for
+detailed session-by-session logs if you want the full story including bugs
+found and fixed along the way.
+
+## The research question
+
+Quantization-Aware Training (QAT) recovers accuracy lost to compressing a
+model's weights and activations to lower precision (e.g. INT8), by training
+the model to compensate for the precision loss. But QAT is expensive — it can
+need 4-6x the VRAM of the base model — and it's not obvious which tensors
+(weights, activations, or both) actually benefit from that expense. This
+project answers that question empirically, entirely on a single
+consumer-grade laptop GPU.
+
+## Background: why this exists
+
+The original version of this study (single model — `facebook/opt-350m`,
+single random seed) was submitted to ACL and reviewed. The review raised six
+concrete points: no seed variance, only one model/dataset tested, no
+comparison against established methods (QLoRA, SmoothQuant, AWQ), perplexity
+was the only metric, some reproducibility details were missing, and there was
+no discussion of broader impact. Separately, the original project's source
+code was lost in a laptop reset — only the PDF write-ups, final results, and
+a chat transcript survived. This repository is a from-scratch rebuild of that
+pipeline, now being expanded into a proper multi-model, multi-seed study that
+answers all six review points. The full expansion plan, with each reviewer
+point mapped to a specific experiment, is in [`docs/PLAN.md`](docs/PLAN.md).
+
+## Hardware this was built and run on
+
+Every number in this repository was produced on one specific machine, under a
+strict, deliberate VRAM ceiling — that ceiling is itself part of the research
+question (can this work at all on hardware this constrained?):
+
+| Component | Spec |
+|---|---|
+| CPU | 13th Gen Intel Core i5-13450HX |
+| RAM | 24 GB |
+| GPU | NVIDIA GeForce RTX 4050 Laptop GPU — **6,141 MiB VRAM** (the hard ceiling for every experiment here) |
+| OS | Windows 11 |
+| Python / PyTorch | 3.12.10 / 2.11.0+cu128 |
+
+Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/reports/2026-08-23_session-1.md).
+
+## Method, in short
+
+1. Take a small causal language model (under ~500M params, so full QAT fits
+   under 6 GB — see the memory-scaling math in
+   [`docs/MATH.md`](docs/MATH.md)).
+2. Establish baselines: zero-shot FP16, INT8 post-training quantization
+   (PTQ), and SmoothQuant PTQ.
+3. Establish a **fine-tuned FP16 control** — the same model, fine-tuned for
+   the same 500 steps, but with no quantization at all. This exists because
+   an earlier run showed that comparing a *fine-tuned* QAT model against a
+   *zero-shot* baseline makes QAT look far better than it actually is (the
+   model is also just learning the dataset, not only learning to handle
+   quantization noise). The control isolates the quantization effect from
+   the fine-tuning effect.
+4. Run selective QAT: inject fake-quantization into **weights only**,
+   **activations only**, or **both**, and compare all three against the
+   control.
+5. Repeat every trained configuration with **3 random seeds** and report the
+   spread, not just one number.
+6. Do this across multiple architecturally different models, not just one.
+
+## Current status
+
+**The 3-model architectural-diversity matrix (Section A of the plan) is
+roughly half done.** This is the core experiment — everything else (the
+memory-frontier/QLoRA study, downstream task evaluation, final statistics)
+builds on top of it and hasn't started yet.
+
+| Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
+|---|---|---|
+| **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done** |
+| **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | 🔄 **6/12 done** |
+| **Qwen2.5-0.5B** (RoPE, GQA) | not started | not started |
+
+**Overall: 18 of 36 planned QAT training runs complete.**
+
+### Results so far
+
+**OPT-350M** (fully complete, 3 seeds each):
+
+| Configuration | Perplexity |
+|---|---|
+| FP16 zero-shot | 41.28 |
+| INT8 PTQ | 41.39 |
+| SmoothQuant PTQ | 43.67 |
+| FP16 fine-tuned control | **21.12** |
+| QAT weights-only | 21.18 |
+| QAT activations-only | 21.82 |
+| QAT both | 21.92 |
+
+**Pythia-410M** (control + weights-only complete; activations-only and both
+not yet run):
+
+| Configuration | Perplexity |
+|---|---|
+| FP16 zero-shot | 29.54 |
+| INT8 PTQ | 29.72 |
+| SmoothQuant PTQ | 256.50 *(broken — see Known Issues)* |
+| FP16 fine-tuned control | **16.75** |
+| QAT weights-only | 16.83 |
+
+### What the pattern looks like so far
+
+On both models tested, **activations-only and both QAT strategies land worse
+than the control**, consistent with the hypothesis that dynamic activation
+outliers are the harder thing to quantize (weights are static and quantize
+more predictably). **Weights-only QAT lands essentially tied with the
+control** rather than clearly beating it — this is notably different from
+the original single-seed study's headline claim that weights-only QAT beats
+the baseline. That's being reported honestly here: it looks like the
+original "QAT as regularizer" finding may not have survived contact with
+seed variance, which is exactly the kind of thing the ACL review's
+seed-variance critique was meant to catch. A formal significance test across
+all 3 models (once complete) will settle this properly — see
+[`docs/PLAN.md`](docs/PLAN.md), Section D.
+
+## Known issues (being tracked, not hidden)
+
+- **SmoothQuant gives a broken number on Pythia-410M** (256 PPL vs. an
+  expected ~29-30). A similar bug was already found and fixed for OPT-350M
+  (its post-norm architecture broke the standard SmoothQuant implementation
+  — full writeup in the session report) using a from-scratch,
+  architecture-agnostic reimplementation in `src/smoothquant_manual.py`.
+  Pythia's fused QKV projection (GPT-NeoX style) appears to be triggering a
+  different edge case in the same code path — not yet root-caused.
+- **AWQ is unavailable on this machine.** `autoawq` requires `triton`, which
+  has no compatible Windows wheel for this Python/CUDA combination.
+  INT8 dynamic + SmoothQuant stand in as the PTQ baseline family for now.
 
 ## Setup
 
@@ -22,9 +153,9 @@ Verify CUDA:
 ./.venv/Scripts/python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-## Pipeline (run from `src/`)
+## Running the pipeline (from `src/`)
 
-1. **Tokenize data** (once per model, tokenizer differs per model family):
+1. **Tokenize data** (once per model):
    ```bash
    python prepare_data.py --model opt-350m
    python prepare_data.py --model pythia-410m
@@ -32,25 +163,26 @@ Verify CUDA:
    python prepare_data.py --model frontier
    ```
 
-2. **PTQ baseline family** (FP16 zero-shot, INT8 dynamic, SmoothQuant, AWQ):
+2. **PTQ baselines** (FP16 zero-shot, INT8 dynamic, SmoothQuant, AWQ):
    ```bash
    python eval_baseline.py --model opt-350m
    ```
 
-3. **Full selective-QAT matrix** (4 trained configs x 3 seeds, per model):
+3. **Full selective-QAT matrix** (resumable — skips any seed/strategy already
+   completed as a real 500-step run):
    ```bash
    python run_matrix.py --model opt-350m
    python run_matrix.py --model pythia-410m
    python run_matrix.py --model qwen2.5-0.5b
    ```
-   Resumable: re-running skips seed/strategy combos already in `results/<model>.json`.
 
-4. **Memory-frontier study** (QAT-infeasibility probe + QLoRA comparison):
+4. **Memory-frontier study** (QAT-infeasibility probe + QLoRA comparison on a
+   1.1B model — not yet run):
    ```bash
    python qlora_frontier.py --mode both
    ```
 
-5. **Downstream zero-shot eval** (on trained checkpoints from step 3):
+5. **Downstream zero-shot eval** (on trained checkpoints — not yet run):
    ```bash
    python eval_downstream.py --model opt-350m --strategy weights_only --seed 42
    ```
@@ -60,23 +192,32 @@ Verify CUDA:
    python stats.py --model all
    ```
 
-## Model registry
+## Repository layout
 
-See [`src/config.py`](src/config.py) for the model roster, hyperparameters,
-and seeds -- single source of truth, referenced by every script.
+- `src/` — all pipeline code (see [`docs/PLAN.md`](docs/PLAN.md) for what
+  each script does and why).
+- `src/config.py` — the model registry, hyperparameters, and seeds; the
+  single source of truth every script reads from.
+- `src/results/<model>.json` — every run's results, keyed by configuration
+  name, one list entry per seed, each entry carrying its own hyperparameters
+  inline (no separate config log to go stale).
+- `docs/PLAN.md` — the full expansion plan, mapping each ACL reviewer point
+  to a specific experiment.
+- `docs/MATH.md` — the mathematical framing: a validated QAT memory-scaling
+  formula, the derived QAT-feasibility crossover point, and the theoretical
+  argument for why weight and activation quantization behave asymmetrically.
+- `docs/reports/` — dated session reports with full detail on what was done,
+  what was found, and every bug hit and fixed along the way.
+- `checkpoints/`, `data/` — not committed (regenerable from code; checkpoints
+  alone run into multiple GB per model).
 
-## Results layout
+## Next steps
 
-- `results/<model_key>.json` -- all runs for a model, keyed by config name,
-  each a list (one entry per seed).
-- `results/<model_key>_downstream_<strategy>.json` -- lm-eval-harness output.
-- `checkpoints/<model>_<strategy>_seed<seed>.pt` -- FP16 state_dicts, loaded
-  by `eval_downstream.py` for downstream eval (never re-evaluate a fresh base
-  model and call it a QAT result -- always load the actual trained weights).
-
-## Reproducibility
-
-Every result entry in `results/*.json` carries its own seed, step count,
-batch size, gradient-accumulation steps, and learning rate inline -- no
-separate hyperparameter log to go stale. `docs/PLAN.md` documents the
-experiment design decisions and the reviewer feedback each addresses.
+1. Finish the Pythia-410M and Qwen2.5-0.5B matrices (18 training runs left).
+2. Debug the Pythia SmoothQuant anomaly.
+3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
+4. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
+   checkpoints.
+5. Run the formal cross-model statistics and significance tests.
+6. Rewrite the paper with the honest multi-seed findings, add the missing
+   societal-impact section, and settle on a target venue.

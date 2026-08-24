@@ -1,0 +1,144 @@
+{
+  "fp16_zero_shot": [
+    {
+      "perplexity": 29.540610408979457,
+      "peak_vram_mib": 2351.3193359375,
+      "eval_time_s": 268.77941727638245,
+      "n_tokens": 1345329
+    }
+  ],
+  "int8_dynamic": [
+    {
+      "perplexity": 29.72345832988001,
+      "peak_vram_mib": 2065.078125,
+      "eval_time_s": 377.80814480781555,
+      "n_tokens": 1345329
+    }
+  ],
+  "smoothquant_w8a8_manual": [
+    {
+      "perplexity": 256.5027595095366,
+      "peak_vram_mib": 3515.9326171875,
+      "eval_time_s": 1094.886964082718,
+      "n_tokens": 1345329
+    }
+  ],
+  "awq_int4": [
+    {
+      "skipped": true,
+      "reason": "No module named 'awq'"
+    }
+  ],
+  "fp16_finetuned_control": [
+    {
+      "perplexity": 16.697451283510848,
+      "peak_vram_mib": 5191.158203125,
+      "eval_time_s": 133.60399866104126,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": null,
+      "mean_activation_rel_error": null,
+      "strategy": "none",
+      "seed": 42,
+      "n_params": 405334016,
+      "n_layers_replaced": 0,
+      "train_time_s": 1354.1019396781921,
+      "peak_train_vram_mib": 4350.14892578125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    },
+    {
+      "perplexity": 16.70118298699037,
+      "peak_vram_mib": 5199.158203125,
+      "eval_time_s": 663.2668488025665,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": null,
+      "mean_activation_rel_error": null,
+      "strategy": "none",
+      "seed": 1337,
+      "n_params": 405334016,
+      "n_layers_replaced": 0,
+      "train_time_s": 1355.2690262794495,
+      "peak_train_vram_mib": 4358.14892578125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    },
+    {
+      "perplexity": 16.85315449225228,
+      "peak_vram_mib": 5195.158203125,
+      "eval_time_s": 137.2368462085724,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": null,
+      "mean_activation_rel_error": null,
+      "strategy": "none",
+      "seed": 2024,
+      "n_params": 405334016,
+      "n_layers_replaced": 0,
+      "train_time_s": 1350.2818734645844,
+      "peak_train_vram_mib": 4354.14892578125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    }
+  ],
+  "qat_weights_only": [
+    {
+      "perplexity": 16.799803470066376,
+      "peak_vram_mib": 5204.673828125,
+      "eval_time_s": 2566.179417848587,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": 0.008584933444968556,
+      "mean_activation_rel_error": null,
+      "strategy": "weights_only",
+      "seed": 42,
+      "n_params": 405334016,
+      "n_layers_replaced": 96,
+      "train_time_s": 2581.13262963295,
+      "peak_train_vram_mib": 4363.66455078125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    },
+    {
+      "perplexity": 16.702566616521178,
+      "peak_vram_mib": 5206.673828125,
+      "eval_time_s": 171.91694521903992,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": 0.008592378799592553,
+      "mean_activation_rel_error": null,
+      "strategy": "weights_only",
+      "seed": 1337,
+      "n_params": 405334016,
+      "n_layers_replaced": 96,
+      "train_time_s": 2546.231525659561,
+      "peak_train_vram_mib": 4365.66455078125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    },
+    {
+      "perplexity": 16.972448634214416,
+      "peak_vram_mib": 5204.673828125,
+      "eval_time_s": 1016.4906849861145,
+      "n_tokens": 202752,
+      "mean_weight_rel_error": 0.008583713004609307,
+      "mean_activation_rel_error": null,
+      "strategy": "weights_only",
+      "seed": 2024,
+      "n_params": 405334016,
+      "n_layers_replaced": 96,
+      "train_time_s": 2512.0681915283203,
+      "peak_train_vram_mib": 4363.66455078125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05
+    }
+  ]
+}
