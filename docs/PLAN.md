@@ -4,6 +4,25 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
+## Status (updated after Day 2)
+
+| Section | Status |
+|---|---|
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B not started) -- 24/36 training runs done |
+| B: Memory-frontier (QLoRA) | Not started |
+| C: Downstream evaluation | Not started (pipeline built, unused) |
+| D: Statistics | Not started (per-seed data exists; aggregation/significance test not yet run) |
+| E: Mathematical framing | 🔄 In progress -- see `docs/MATH.md`, now backed by real 2-model data |
+| F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session |
+
+Headline finding so far (see `docs/MATH.md` §3 and
+`docs/reports/2026-08-24_session-2.md` §2.1): weights-only QAT behaves
+almost identically on OPT-350M and Pythia-410M (~+0.3-0.5% PPL either way),
+but activation-only QAT is a mild +3.3% hit on OPT-350M versus a severe
++106% hit on Pythia-410M -- a genuine architecture-dependence result Section
+A was specifically designed to be able to surface. Whether Qwen2.5-0.5B
+(RoPE, GQA) lands closer to one extreme or the other is still open.
+
 ## Reviewer weakness -> plan item
 
 | # | Weakness (ACL review) | Plan item |
@@ -18,9 +37,9 @@ for a journal (venue not yet decided).
 ## Section A: Selective-QAT architectural-diversity matrix
 
 Models (all fit the validated ~10P-byte QAT memory rule under 6GB):
-- facebook/opt-350m       (learned pos. embeddings, MHA)   -- P=0.331B
-- EleutherAI/pythia-410m  (learned pos. embeddings, MHA)   -- P=0.405B
-- Qwen/Qwen2.5-0.5B       (RoPE, modern tokenizer)         -- P=0.494B
+- facebook/opt-350m       (learned pos. embeddings, MHA)        -- P=0.331B -- DONE
+- EleutherAI/pythia-410m  (learned pos. embeddings, fused QKV)  -- P=0.405B -- DONE
+- Qwen/Qwen2.5-0.5B       (RoPE, GQA, modern tokenizer)         -- P=0.494B -- not started
 
 Per model:
 - FP16 zero-shot baseline (1 run, deterministic)
@@ -34,9 +53,12 @@ Per model:
 
 ## Section B: Memory-frontier study (QAT vs. QLoRA)
 
-Validated rule from Section-A data: peak QAT training VRAM ~= 10 * P (GB).
-This predicts QAT becomes infeasible under 6GB once P > ~0.5-0.55B (matches
-observed "danger zone" for Qwen2.5-0.5B). Pick one model at/above this crossover:
+Validated rule from real Section-A data (2 of 3 models; see `docs/MATH.md`
+§1 for the fit): peak QAT training VRAM ≈ 9.49 * P + 0.41 (GB). This predicts
+QAT becomes infeasible under 6GB once P > ~0.54-0.59B (`docs/MATH.md` §2) --
+Qwen2.5-0.5B (P=0.494B) is predicted to fit comfortably (~5.1 GB), not be in
+a "danger zone" as an earlier informal estimate suggested before real data
+was available. Pick one model at/above this crossover for the frontier study:
 
 - TinyLlama-1.1B or SmolLM2-1.7B -- P >= 1.1B, full QAT provably exceeds 6GB.
 
@@ -93,6 +115,12 @@ all 3 seeds if time allows) + both models in Section B.
 ## Rough compute budget
 
 - Section A: ~3-5 hrs GPU time (training) + ~1-2 hrs (SmoothQuant/AWQ calibration)
+  -- **actual observed: significantly higher**, partly due to intermittent
+  eval-time anomalies on Pythia-410M (some runs' eval took up to ~40x longer
+  than normal with no code-path difference or correctness issue -- see
+  `docs/reports/2026-08-24_session-2.md` §2.2, still unresolved). Treat this
+  budget as a lower bound, not an estimate to plan sessions around.
 - Section B: ~2-3 hrs GPU time
 - Section C: several hours, parallelizable / can run overnight, subsampled
-- Total: ~2-3 days of laptop time across sessions
+- Total: ~2-3 days of laptop time across sessions (revised: likely more,
+  given the above)
