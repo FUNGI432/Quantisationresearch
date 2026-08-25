@@ -73,18 +73,18 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 
 ## Current status
 
-**The 3-model architectural-diversity matrix (Section A of the plan) is
-roughly half done.** This is the core experiment — everything else (the
+**2 of 3 models in the architectural-diversity matrix (Section A of the plan)
+are now fully complete.** This is the core experiment — everything else (the
 memory-frontier/QLoRA study, downstream task evaluation, final statistics)
 builds on top of it and hasn't started yet.
 
 | Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done** |
-| **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | 🔄 **6/12 done** |
+| **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
 | **Qwen2.5-0.5B** (RoPE, GQA) | not started | not started |
 
-**Overall: 18 of 36 planned QAT training runs complete.**
+**Overall: 24 of 36 planned QAT training runs complete.**
 
 ### Results so far
 
@@ -100,8 +100,7 @@ builds on top of it and hasn't started yet.
 | QAT activations-only | 21.82 |
 | QAT both | 21.92 |
 
-**Pythia-410M** (control + weights-only complete; activations-only and both
-not yet run):
+**Pythia-410M** (fully complete, 3 seeds each):
 
 | Configuration | Perplexity |
 |---|---|
@@ -109,7 +108,9 @@ not yet run):
 | INT8 PTQ | 29.72 |
 | SmoothQuant PTQ | 256.50 *(broken — see Known Issues)* |
 | FP16 fine-tuned control | **16.75** |
-| QAT weights-only | 16.83 |
+| QAT weights-only | 16.82 |
+| QAT activations-only | 34.54 |
+| QAT both | 34.58 |
 
 ### What the pattern looks like so far
 
@@ -117,13 +118,25 @@ On both models tested, **activations-only and both QAT strategies land worse
 than the control**, consistent with the hypothesis that dynamic activation
 outliers are the harder thing to quantize (weights are static and quantize
 more predictably). **Weights-only QAT lands essentially tied with the
-control** rather than clearly beating it — this is notably different from
-the original single-seed study's headline claim that weights-only QAT beats
-the baseline. That's being reported honestly here: it looks like the
-original "QAT as regularizer" finding may not have survived contact with
-seed variance, which is exactly the kind of thing the ACL review's
-seed-variance critique was meant to catch. A formal significance test across
-all 3 models (once complete) will settle this properly — see
+control on both models** (within ~0.5%) rather than clearly beating it — this
+is notably different from the original single-seed study's headline claim
+that weights-only QAT beats the baseline. That's being reported honestly
+here: it looks like the original "QAT as regularizer" finding may not have
+survived contact with seed variance, which is exactly the kind of thing the
+ACL review's seed-variance critique was meant to catch.
+
+The more striking finding is how differently the two architectures react to
+**activation** quantization: on OPT-350M it's a mild +3.3% hit
+(21.12 -> 21.82), but on Pythia-410M it's a **+106% hit** (16.75 -> 34.54) —
+more than double. Pythia's GPT-NeoX-style fused QKV projection appears to be
+dramatically more sensitive to activation quantization than OPT's separate
+q/k/v projections. This is exactly the kind of architecture-dependence the
+single-model v1 study had no way to see, and is a stronger, more general
+result than anything in the original submission. Whether Qwen2.5-0.5B (RoPE,
+GQA — a third, different design) lands closer to OPT's mild degradation or
+Pythia's severe one is the open question the last model in the matrix will
+answer. A formal significance test across all 3 models (once complete) will
+also settle the weights-only-vs-control question properly — see
 [`docs/PLAN.md`](docs/PLAN.md), Section D.
 
 ## Known issues (being tracked, not hidden)
@@ -138,6 +151,14 @@ all 3 models (once complete) will settle this properly — see
 - **AWQ is unavailable on this machine.** `autoawq` requires `triton`, which
   has no compatible Windows wheel for this Python/CUDA combination.
   INT8 dynamic + SmoothQuant stand in as the PTQ baseline family for now.
+- **Intermittent, large eval-time slowdowns on Pythia-410M.** A handful of
+  runs (e.g. `both`/seed=1337: 7,528s eval vs. a normal ~150-200s) took far
+  longer than every other run of the identical configuration, with no
+  difference in code path or result correctness (perplexity landed in the
+  expected range each time). Doesn't appear to correlate with a specific
+  strategy — some `both` runs were fast, some slow. Likely background system
+  contention (disk I/O, OS activity) on this laptop rather than a pipeline
+  bug, but not confirmed. Doesn't affect correctness, only wall-clock time.
 
 ## Setup
 
@@ -213,7 +234,7 @@ Verify CUDA:
 
 ## Next steps
 
-1. Finish the Pythia-410M and Qwen2.5-0.5B matrices (18 training runs left).
+1. Run the Qwen2.5-0.5B matrix (12 training runs + baselines — the last model).
 2. Debug the Pythia SmoothQuant anomaly.
 3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
 4. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
