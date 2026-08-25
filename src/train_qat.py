@@ -16,7 +16,7 @@ import bitsandbytes as bnb
 import torch
 from transformers import AutoModelForCausalLM
 
-from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, set_seed
+from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
 from config import BATCH_SIZE, EVAL_SUBSET_SIZE, GRAD_ACCUM_STEPS, LEARNING_RATE, RESULTS_DIR, TRAIN_STEPS
 from fakequant import STRATEGIES, inject_fake_quant
 from prepare_data import resolve_hf_id
@@ -112,6 +112,7 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
         "batch_size": BATCH_SIZE,
         "grad_accum_steps": GRAD_ACCUM_STEPS,
         "learning_rate": LEARNING_RATE,
+        **run_metadata(),
     })
 
     key = "fp16_finetuned_control" if strategy == "none" else f"qat_{strategy}"

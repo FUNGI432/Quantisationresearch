@@ -12,7 +12,7 @@ import gc
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, set_seed
+from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
 from prepare_data import resolve_hf_id
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -91,11 +91,12 @@ def main(model_key: str, max_batches: int = 0, seed: int = 42):
     dataloader = get_dataloader(ds, batch_size=4)
 
     print(f"Model: {hf_id}  |  device: {DEVICE}  |  eval examples: {len(ds)}")
+    meta = run_metadata()
 
-    append_result(model_key, "fp16_zero_shot", run_fp16_zero_shot(hf_id, dataloader))
-    append_result(model_key, "int8_dynamic", run_int8_dynamic(hf_id, dataloader))
+    append_result(model_key, "fp16_zero_shot", {**run_fp16_zero_shot(hf_id, dataloader), **meta})
+    append_result(model_key, "int8_dynamic", {**run_int8_dynamic(hf_id, dataloader), **meta})
     run_smoothquant(model_key, max_batches // 4 if max_batches > 0 else 0)  # appends its own result key
-    append_result(model_key, "awq_int4", run_awq(hf_id, dataloader))
+    append_result(model_key, "awq_int4", {**run_awq(hf_id, dataloader), **meta})
 
 
 if __name__ == "__main__":

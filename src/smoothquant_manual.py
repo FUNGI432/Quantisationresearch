@@ -49,7 +49,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM
 
-from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, set_seed
+from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
 from fakequant import _make_activation_fake_quant, _make_weight_fake_quant
 from prepare_data import resolve_hf_id
 
@@ -164,6 +164,7 @@ def run(model_key: str, max_calibration_batches: int = 8, max_eval_batches: int 
     eval_ds = ds if max_eval_batches == 0 else ds.select(range(min(max_eval_batches * 4, len(ds))))
     eval_loader = get_dataloader(eval_ds, batch_size=4)
     result = evaluate_perplexity(model, eval_loader, DEVICE, desc="smoothquant_manual_w8a8")
+    result.update({"alpha": ALPHA, "max_calibration_batches": max_calibration_batches, **run_metadata()})
     append_result(model_key, "smoothquant_w8a8_manual", result)
     return result
 

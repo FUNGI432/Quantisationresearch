@@ -3,6 +3,7 @@
 import json
 import os
 import random
+import subprocess
 import time
 
 import numpy as np
@@ -11,6 +12,39 @@ from datasets import load_from_disk
 from torch.utils.data import DataLoader
 
 from config import DATA_DIR, RESULTS_DIR
+
+
+def git_commit_hash() -> str:
+    """Best-effort short commit hash for reproducibility -- 'unknown' (not a
+    hard failure) if git isn't available or there are no commits yet, since
+    this must never block a training run from completing."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, cwd=os.path.dirname(__file__)
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+
+def run_metadata() -> dict:
+    """Static settings that don't vary per-seed but must still be recorded
+    for reproducibility (PLAN.md Section F / ACL reviewer critique #5) --
+    previously claimed as captured but not actually written to results.json;
+    this closes that gap."""
+    from config import DATASET_CONFIG, DATASET_NAME, EVAL_SUBSET_SIZE, MAX_SEQ_LEN, TOKENIZE_SAMPLES
+
+    return {
+        "git_commit": git_commit_hash(),
+        "dataset_name": DATASET_NAME,
+        "dataset_config": DATASET_CONFIG,
+        "max_seq_len": MAX_SEQ_LEN,
+        "tokenize_samples": TOKENIZE_SAMPLES,
+        "eval_subset_size": EVAL_SUBSET_SIZE,
+        "optimizer": "bitsandbytes.optim.AdamW8bit",
+        "gradient_checkpointing": True,
+        "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+        "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+    }
 
 
 def set_seed(seed: int):
