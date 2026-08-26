@@ -84,7 +84,7 @@ Session paused here; resuming is safe (see below).
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12** — paused mid-first-run |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12 complete** — `none`/seed=42 paused at step 200/500, safely checkpointed |
 
 **Overall: 24 of 36 planned QAT training runs complete.**
 
