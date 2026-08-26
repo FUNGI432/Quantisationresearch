@@ -8,7 +8,7 @@ for a journal (venue not yet decided).
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B not started) -- 24/36 training runs done |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix paused at 0/12 -- see session-3 report §4) -- 24/36 training runs done |
 | B: Memory-frontier (QLoRA) | Not started |
 | C: Downstream evaluation | Not started (pipeline built, unused) |
 | D: Statistics | Not started (per-seed data exists; aggregation/significance test not yet run) |
@@ -39,7 +39,7 @@ A was specifically designed to be able to surface. Whether Qwen2.5-0.5B
 Models (all fit the validated ~10P-byte QAT memory rule under 6GB):
 - facebook/opt-350m       (learned pos. embeddings, MHA)        -- P=0.331B -- DONE
 - EleutherAI/pythia-410m  (learned pos. embeddings, fused QKV)  -- P=0.405B -- DONE
-- Qwen/Qwen2.5-0.5B       (RoPE, GQA, modern tokenizer)         -- P=0.494B -- not started
+- Qwen/Qwen2.5-0.5B       (RoPE, GQA, modern tokenizer)         -- P=0.494B -- baselines done, QAT paused at 0/12
 
 Per model:
 - FP16 zero-shot baseline (1 run, deterministic)

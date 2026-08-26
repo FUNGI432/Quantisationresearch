@@ -74,18 +74,19 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 ## Current status
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
-are fully complete, and the 3rd (Qwen2.5-0.5B) is now running.** This is the
-core experiment — everything else (the memory-frontier/QLoRA study,
-downstream task evaluation, final statistics) builds on top of it and hasn't
-started yet.
+are fully complete. Qwen2.5-0.5B's PTQ baselines are done; its QAT matrix
+hasn't produced a result yet** — the first attempted run ran 2.5+ hours
+without finishing (an unresolved slowdown anomaly, not an error — see Known
+Issues) and was deliberately stopped rather than left running indefinitely.
+Session paused here; resuming is safe (see below).
 
 | Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | 🔄 running | 🔄 running |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12** — paused mid-first-run |
 
-**Overall: 24 of 36 planned QAT training runs complete, Qwen2.5-0.5B's 12 in progress.**
+**Overall: 24 of 36 planned QAT training runs complete.**
 
 ### Results so far
 
@@ -120,6 +121,25 @@ The numbers shifted slightly but the finding didn't change.)*
 | QAT activations-only | 34.54 |
 | QAT both | 34.58 |
 
+**Qwen2.5-0.5B** (PTQ baselines only — QAT matrix paused before its first
+run completed):
+
+| Configuration | Perplexity |
+|---|---|
+| FP16 zero-shot | 21.61 |
+| INT8 PTQ | 21.84 |
+| SmoothQuant PTQ | 88.17 *(broken — see Known Issues; also confirms this isn't Pythia-specific)* |
+| FP16 fine-tuned control | *(pending)* |
+| QAT weights-only | *(pending)* |
+| QAT activations-only | *(pending)* |
+| QAT both | *(pending)* |
+
+Notably, Qwen2.5-0.5B's zero-shot FP16 perplexity (21.61) is already close to
+where OPT-350M and Pythia-410M land only *after* 500 steps of fine-tuning —
+a modern, better-pretrained small model needs far less adaptation to the
+target domain. Whether QAT still moves the needle meaningfully at that
+starting point is one more open question the completed matrix will answer.
+
 ### What the pattern looks like so far
 
 On both models tested, **activations-only and both QAT strategies land worse
@@ -149,24 +169,42 @@ also settle the weights-only-vs-control question properly — see
 
 ## Known issues (being tracked, not hidden)
 
-- **SmoothQuant gives a broken number on Pythia-410M** (256 PPL vs. an
-  expected ~29-30). A similar bug was already found and fixed for OPT-350M
-  (its post-norm architecture broke the standard SmoothQuant implementation
-  — full writeup in the session report) using a from-scratch,
+- **SmoothQuant gives a broken (much too high) number on 2 of 3 models —
+  Pythia-410M (256 PPL vs. ~29-30 expected) and Qwen2.5-0.5B (88 PPL vs.
+  ~21-22 expected).** Only OPT-350M's SmoothQuant number looks right (43.67,
+  a modest +5.8% over FP16). An earlier, more severe version of this bug on
+  OPT-350M was already found and fixed (its post-norm architecture broke the
+  standard SmoothQuant fold-into-LayerNorm trick entirely — see
+  `docs/reports/2026-08-23_session-1.md`) with a from-scratch,
   architecture-agnostic reimplementation in `src/smoothquant_manual.py`.
-  Pythia's fused QKV projection (GPT-NeoX style) appears to be triggering a
-  different edge case in the same code path — not yet root-caused.
+  Originally assumed Pythia's fused QKV projection (GPT-NeoX style) was
+  triggering a distinct edge case in that same code path — but Qwen2.5-0.5B
+  uses separate q/k/v/o projections like OPT and *still* shows large
+  degradation, which rules that explanation out. More likely culprit:
+  something in the calibration itself (sample count, or `alpha=0.5` not
+  being well-tuned across architectures) — not yet root-caused, needs real
+  investigation before these numbers go in the paper.
 - **AWQ is unavailable on this machine.** `autoawq` requires `triton`, which
   has no compatible Windows wheel for this Python/CUDA combination.
   INT8 dynamic + SmoothQuant stand in as the PTQ baseline family for now.
-- **Intermittent, large eval-time slowdowns on Pythia-410M.** A handful of
-  runs (e.g. `both`/seed=1337: 7,528s eval vs. a normal ~150-200s) took far
-  longer than every other run of the identical configuration, with no
-  difference in code path or result correctness (perplexity landed in the
-  expected range each time). Doesn't appear to correlate with a specific
-  strategy — some `both` runs were fast, some slow. Likely background system
-  contention (disk I/O, OS activity) on this laptop rather than a pipeline
-  bug, but not confirmed. Doesn't affect correctness, only wall-clock time.
+- **Intermittent, large slowdowns that now span multiple models and both
+  training and eval phases.** First seen on Pythia-410M's eval (e.g.
+  `both`/seed=1337: 7,528s eval vs. a normal ~150-200s). Then seen on
+  Qwen2.5-0.5B's *training* phase — its first QAT run (`none`/seed=42) ran
+  over 2.5 hours without completing 500 steps, versus the usual 20-45
+  minutes, and was eventually killed deliberately rather than left running
+  indefinitely (see `docs/reports/2026-08-26_session-3.md` §4). GPU stayed
+  near 100% utilization throughout — this is not a hang, just unpredictably
+  slow. No correlation found yet with strategy, model, or training-vs-eval
+  phase. Given it's now recurred three times across two models and both
+  phases of the pipeline, this should be treated as a real, unresolved
+  infrastructure issue rather than isolated noise.
+- **No mid-training checkpointing.** `train_qat.py` only saves a checkpoint
+  after all 500 steps *and* evaluation complete. Combined with the slowdown
+  issue above, this means an interrupted run loses all of its progress with
+  no way to resume partway through. Recommended fix (not yet implemented):
+  periodic checkpointing (e.g. every 100 steps) with resume-from-partial
+  logic.
 - **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
   isn't implemented yet~~** — `src/stats.py` currently falls back to a
   Welch's t-test on 3 aggregate per-seed PPL values, explicitly caveated in
@@ -253,11 +291,16 @@ Verify CUDA:
 
 ## Next steps
 
-1. Run the Qwen2.5-0.5B matrix (12 training runs + baselines — the last model).
-2. Debug the Pythia SmoothQuant anomaly.
-3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
-4. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
+1. (Recommended before resuming long runs) Add mid-training checkpointing +
+   resume-from-partial logic to `train_qat.py`, given the recurring
+   slowdown issue below.
+2. Finish the Qwen2.5-0.5B QAT matrix (12 training runs — baselines are done).
+3. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
+   Pythia-specific.
+4. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
+5. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
    checkpoints.
-5. Run the formal cross-model statistics and significance tests.
-6. Rewrite the paper with the honest multi-seed findings, add the missing
+6. Run the formal cross-model statistics and significance tests (needs
+   per-example NLL logging added first for the real Wilcoxon test).
+7. Rewrite the paper with the honest multi-seed findings, add the missing
    societal-impact section, and settle on a target venue.

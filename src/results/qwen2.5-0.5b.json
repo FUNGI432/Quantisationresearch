@@ -1,0 +1,74 @@
+{
+  "fp16_zero_shot": [
+    {
+      "perplexity": 21.60614765108092,
+      "peak_vram_mib": 4566.5283203125,
+      "eval_time_s": 432.9257667064667,
+      "n_tokens": 1409031,
+      "git_commit": "e45a086",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "int8_dynamic": [
+    {
+      "perplexity": 21.84021068096774,
+      "peak_vram_mib": 4226.6083984375,
+      "eval_time_s": 838.7230327129364,
+      "n_tokens": 1409031,
+      "git_commit": "e45a086",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "smoothquant_w8a8_manual": [
+    {
+      "perplexity": 88.16880815507677,
+      "peak_vram_mib": 5565.68994140625,
+      "eval_time_s": 1661.1385645866394,
+      "n_tokens": 1409031,
+      "alpha": 0.5,
+      "max_calibration_batches": 8,
+      "git_commit": "91c26a3",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "awq_int4": [
+    {
+      "skipped": true,
+      "reason": "No module named 'awq'",
+      "git_commit": "e45a086",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ]
+}
