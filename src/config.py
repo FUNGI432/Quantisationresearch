@@ -32,6 +32,11 @@ FRONTIER_MODEL = {
 
 # --- Shared training hyperparameters -----------------------------------------
 TRAIN_STEPS = 500
+# Save a resumable mid-training checkpoint every N steps, so a run can be
+# killed (to free the GPU for something urgent) and continued later without
+# losing more than a few minutes of progress. Also saved immediately on
+# Ctrl+C / SIGTERM regardless of this interval. See train_qat.py.
+CHECKPOINT_EVERY_STEPS = 50
 BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = 8
 MAX_SEQ_LEN = 512

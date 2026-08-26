@@ -109,7 +109,11 @@ all 3 seeds if time allows) + both models in Section B.
 
 - All code in this repo (`qat-research/`), pinned `requirements.txt`.
 - Every run writes full hyperparameters + seed + git commit hash into its
-  results.json entry.
+  results.json entry (`common.run_metadata()` -- this was claimed but not
+  actually true until Day 3; see the session-3 report §1).
+- Mid-training checkpointing (Day 3, `config.CHECKPOINT_EVERY_STEPS`) means a
+  run can be safely paused (even via a hard kill) and resumed without
+  restarting from step 0 -- verified end-to-end, see session-3 report §5.
 - Final paper appendix: full hyperparameter table.
 
 ## Rough compute budget

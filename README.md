@@ -199,12 +199,17 @@ also settle the weights-only-vs-control question properly — see
   phase. Given it's now recurred three times across two models and both
   phases of the pipeline, this should be treated as a real, unresolved
   infrastructure issue rather than isolated noise.
-- **No mid-training checkpointing.** `train_qat.py` only saves a checkpoint
-  after all 500 steps *and* evaluation complete. Combined with the slowdown
-  issue above, this means an interrupted run loses all of its progress with
-  no way to resume partway through. Recommended fix (not yet implemented):
-  periodic checkpointing (e.g. every 100 steps) with resume-from-partial
-  logic.
+- **~~No mid-training checkpointing~~ — fixed on Day 3.** `train_qat.py` now
+  saves a full resumable checkpoint (model + FakeQuantize buffers +
+  optimizer state + cumulative elapsed time) every `config.CHECKPOINT_EVERY_STEPS`
+  (default 50) steps, plus immediately on Ctrl+C/SIGTERM. Verified against
+  the realistic case — a hard kill via the harness's `TaskStop` (not a
+  graceful signal) mid-run, then resuming picked up at the correct step with
+  optimizer state intact. See `docs/reports/2026-08-26_session-3.md` §5 for
+  the full verification and an important caveat: the signal-handler path is
+  unconfirmed against a real external kill on Windows (native Windows
+  doesn't reliably deliver SIGTERM the way POSIX does) — the periodic save
+  is what's actually been verified to work, not the interrupt handler.
 - **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
   isn't implemented yet~~** — `src/stats.py` currently falls back to a
   Welch's t-test on 3 aggregate per-seed PPL values, explicitly caveated in
@@ -291,16 +296,15 @@ Verify CUDA:
 
 ## Next steps
 
-1. (Recommended before resuming long runs) Add mid-training checkpointing +
-   resume-from-partial logic to `train_qat.py`, given the recurring
-   slowdown issue below.
-2. Finish the Qwen2.5-0.5B QAT matrix (12 training runs — baselines are done).
-3. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
+1. Finish the Qwen2.5-0.5B QAT matrix (12 training runs — baselines are
+   done). Safe to pause/resume freely now — see mid-training checkpointing
+   above.
+2. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
    Pythia-specific.
-4. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
-5. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
+3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
+4. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
    checkpoints.
-6. Run the formal cross-model statistics and significance tests (needs
+5. Run the formal cross-model statistics and significance tests (needs
    per-example NLL logging added first for the real Wilcoxon test).
-7. Rewrite the paper with the honest multi-seed findings, add the missing
+6. Rewrite the paper with the honest multi-seed findings, add the missing
    societal-impact section, and settle on a target venue.
