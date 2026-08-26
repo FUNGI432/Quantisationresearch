@@ -74,17 +74,18 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 ## Current status
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
-are now fully complete.** This is the core experiment — everything else (the
-memory-frontier/QLoRA study, downstream task evaluation, final statistics)
-builds on top of it and hasn't started yet.
+are fully complete, and the 3rd (Qwen2.5-0.5B) is now running.** This is the
+core experiment — everything else (the memory-frontier/QLoRA study,
+downstream task evaluation, final statistics) builds on top of it and hasn't
+started yet.
 
 | Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
 |---|---|---|
-| **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done** |
+| **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | not started | not started |
+| **Qwen2.5-0.5B** (RoPE, GQA) | 🔄 running | 🔄 running |
 
-**Overall: 24 of 36 planned QAT training runs complete.**
+**Overall: 24 of 36 planned QAT training runs complete, Qwen2.5-0.5B's 12 in progress.**
 
 ### Results so far
 
@@ -95,10 +96,17 @@ builds on top of it and hasn't started yet.
 | FP16 zero-shot | 41.28 |
 | INT8 PTQ | 41.39 |
 | SmoothQuant PTQ | 43.67 |
-| FP16 fine-tuned control | **21.12** |
-| QAT weights-only | 21.18 |
-| QAT activations-only | 21.82 |
+| FP16 fine-tuned control | **21.02** |
+| QAT weights-only | 21.09 |
+| QAT activations-only | 21.84 |
 | QAT both | 21.92 |
+
+*(Revised on Day 3 after fixing an internal eval-set inconsistency — 5 of
+OPT-350M's 12 runs were originally scored on the full 10k-example set before
+the fast-eval fix existed, while the rest used the 1,500-example subset. All
+12 are now consistently on the subset; see
+[`docs/reports/2026-08-26_session-3.md`](docs/reports/2026-08-26_session-3.md).
+The numbers shifted slightly but the finding didn't change.)*
 
 **Pythia-410M** (fully complete, 3 seeds each):
 
@@ -127,7 +135,7 @@ ACL review's seed-variance critique was meant to catch.
 
 The more striking finding is how differently the two architectures react to
 **activation** quantization: on OPT-350M it's a mild +3.3% hit
-(21.12 -> 21.82), but on Pythia-410M it's a **+106% hit** (16.75 -> 34.54) —
+(21.02 -> 21.84), but on Pythia-410M it's a **+106% hit** (16.75 -> 34.54) —
 more than double. Pythia's GPT-NeoX-style fused QKV projection appears to be
 dramatically more sensitive to activation quantization than OPT's separate
 q/k/v projections. This is exactly the kind of architecture-dependence the
@@ -159,6 +167,17 @@ also settle the weights-only-vs-control question properly — see
   strategy — some `both` runs were fast, some slow. Likely background system
   contention (disk I/O, OS activity) on this laptop rather than a pipeline
   bug, but not confirmed. Doesn't affect correctness, only wall-clock time.
+- **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
+  isn't implemented yet~~** — `src/stats.py` currently falls back to a
+  Welch's t-test on 3 aggregate per-seed PPL values, explicitly caveated in
+  its own output as too small a sample to trust. The real per-example paired
+  test needs per-example NLL logging added to the eval loop first.
+- **~~`docs/PLAN.md` claimed every result recorded its git commit hash and
+  full hyperparameters~~ — fixed on Day 3.** It didn't, for any of the 24
+  completed runs. Closed via `common.run_metadata()`, now wired into every
+  result-logging path. Old runs aren't retroactively stamped (not needed —
+  every run used identical settings from version-controlled `config.py`,
+  fully recoverable from git history), but nothing new will have this gap.
 
 ## Setup
 
