@@ -8,7 +8,8 @@ being expanded from an ACL Submission (#173) that came back with reviewer
 feedback. This README explains what the project is, what's been done, and
 exactly where it stands right now — see [`docs/reports/`](docs/reports/) for
 detailed session-by-session logs if you want the full story including bugs
-found and fixed along the way.
+found and fixed along the way, and [`docs/JOURNAL.md`](docs/JOURNAL.md) for
+the narrative, "how it actually went" version of the same story.
 
 ## The research question
 
@@ -75,16 +76,25 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
 are fully complete. Qwen2.5-0.5B's PTQ baselines are done; its QAT matrix
-hasn't produced a result yet** — the first attempted run ran 2.5+ hours
-without finishing (an unresolved slowdown anomaly, not an error — see Known
-Issues) and was deliberately stopped rather than left running indefinitely.
-Session paused here; resuming is safe (see below).
+hasn't produced a result yet** — a persistent, unexplained slowdown means its
+runs are taking hours instead of the ~20-45 minutes OPT-350M and Pythia-410M
+took (see Known Issues). Session paused deliberately, not reactively;
+resuming is safe (see below).
+
+**Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
+Section A (the matrix) answers only 1 of the 6 original ACL reviewer
+critiques — architectural diversity. The other 5 (seed variance now
+partially addressed; QLoRA/SmoothQuant/AWQ comparisons partially addressed
+via SmoothQuant + INT8; downstream evaluation, real significance testing,
+and societal impact) are either partial or **not started at all**. Finishing
+Qwen's matrix is not the same as finishing this project's response to the
+reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
 
 | Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12 complete** — `none`/seed=42 paused at step 200/500, safely checkpointed |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12 complete** — `none`/seed=42 paused at step 350/500 (5.1 hrs in — see Known Issues on the slowdown pattern), safely checkpointed |
 
 **Overall: 24 of 36 planned QAT training runs complete.**
 
