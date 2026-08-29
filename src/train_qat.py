@@ -30,7 +30,15 @@ import bitsandbytes as bnb
 import torch
 from transformers import AutoModelForCausalLM
 
-from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
+from common import (
+    append_result,
+    evaluate_perplexity,
+    get_dataloader,
+    load_tokenized_dataset,
+    run_metadata,
+    save_per_example_nll,
+    set_seed,
+)
 from config import (
     BATCH_SIZE,
     CHECKPOINT_EVERY_STEPS,
@@ -186,7 +194,12 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
         "mean_activation_rel_error": (sum(act_errors) / len(act_errors)) if act_errors else None,
     }
 
-    eval_result = evaluate_perplexity(model, eval_loader, DEVICE, desc=f"{strategy}_seed{seed}")
+    key = "fp16_finetuned_control" if strategy == "none" else f"qat_{strategy}"
+    eval_result = evaluate_perplexity(model, eval_loader, DEVICE, desc=f"{strategy}_seed{seed}", return_per_example=True)
+    per_example_nll = eval_result.pop("per_example_nll")
+    per_example_path = save_per_example_nll(model_key, key, seed, per_example_nll)
+    print(f"  Saved per-example NLL ({len(per_example_nll)} examples) -> {per_example_path}")
+    eval_result["per_example_nll_path"] = per_example_path
     eval_result.update(error_summary)
     eval_result.update({
         "strategy": strategy,
@@ -203,7 +216,6 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
         **run_metadata(),
     })
 
-    key = "fp16_finetuned_control" if strategy == "none" else f"qat_{strategy}"
     append_result(model_key, key, eval_result)
 
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)

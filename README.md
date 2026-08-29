@@ -221,10 +221,15 @@ also settle the weights-only-vs-control question properly — see
   doesn't reliably deliver SIGTERM the way POSIX does) — the periodic save
   is what's actually been verified to work, not the interrupt handler.
 - **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
-  isn't implemented yet~~** — `src/stats.py` currently falls back to a
-  Welch's t-test on 3 aggregate per-seed PPL values, explicitly caveated in
-  its own output as too small a sample to trust. The real per-example paired
-  test needs per-example NLL logging added to the eval loop first.
+  isn't implemented yet~~ — implemented Day 4, not yet exercised on real
+  data.** `common.evaluate_perplexity(return_per_example=True)` now logs
+  one NLL value per held-out example; `src/stats.py` runs a real paired
+  Wilcoxon test per seed on that data, falling back to the old caveated
+  t-test only for runs that predate this (all 24 completed OPT-350M/
+  Pythia-410M runs, for now). `src/backfill_per_example_nll.py` can add
+  this retroactively from saved checkpoints (no retraining) — dry-run
+  verified, not yet actually run (needs a GPU-idle window; Qwen's matrix
+  was using the GPU when this was built).
 - **~~`docs/PLAN.md` claimed every result recorded its git commit hash and
   full hyperparameters~~ — fixed on Day 3.** It didn't, for any of the 24
   completed runs. Closed via `common.run_metadata()`, now wired into every

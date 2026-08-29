@@ -4,16 +4,22 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 2)
+## Status (updated after Day 4)
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix paused at 0/12 -- see session-3 report §4) -- 24/36 training runs done |
-| B: Memory-frontier (QLoRA) | Not started |
-| C: Downstream evaluation | Not started (pipeline built, unused) |
-| D: Statistics | Not started (per-seed data exists; aggregation/significance test not yet run) |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at 0/12 complete, one run mid-flight -- see session-4 report) -- 24/36 training runs done |
+| B: Memory-frontier (QLoRA) | **Not started at all** -- flagged Day 4 as one of 3 fully-unaddressed reviewer critiques |
+| C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
+| D: Statistics | 🔄 Real Wilcoxon signed-rank test now implemented (Day 4, `stats.py` + per-example NLL logging in `common.py`), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed runs (`backfill_per_example_nll.py`, dry-run verified) and a completed Qwen run to test against |
 | E: Mathematical framing | 🔄 In progress -- see `docs/MATH.md`, now backed by real 2-model data |
 | F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session |
+
+**Honest note (Day 4):** completing Section A's matrix answers only 1 of
+the 6 original reviewer critiques (architectural diversity). Sections B and
+C remain fully unstarted; Section D moved from unstarted to "built,
+awaiting data" this session. See `docs/reports/2026-08-29_session-4.md` and
+`docs/JOURNAL.md` for the fuller reasoning behind flagging this explicitly.
 
 Headline finding so far (see `docs/MATH.md` §3 and
 `docs/reports/2026-08-24_session-2.md` §2.1): weights-only QAT behaves
@@ -85,11 +91,18 @@ all 3 seeds if time allows) + both models in Section B.
 
 ## Section D: Statistics
 
-- Mean +/- std perplexity across 3 seeds per configuration.
+- Mean +/- std perplexity across 3 seeds per configuration -- implemented,
+  `stats.py::summarize()`.
 - Paired comparison (same seeds, same eval set) between QAT weights_only and
-  FP16 fine-tuned control per model -- Wilcoxon signed-rank test on per-example
-  NLL (more robust than a t-test on 3 aggregate PPL numbers).
-- Report effect size, not just p-value.
+  FP16 fine-tuned control per model -- Wilcoxon signed-rank test on
+  per-example NLL (more robust than a t-test on 3 aggregate PPL numbers) --
+  **implemented Day 4** (`stats.py::wilcoxon_per_seed()`, backed by
+  `common.evaluate_perplexity(return_per_example=True)`), not yet run on
+  real multi-seed data. Also now covers activations_only and both vs.
+  control, not just weights_only.
+- Report effect size, not just p-value -- mean per-example NLL diff is
+  reported alongside the p-value; a more formal effect-size statistic
+  (e.g. rank-biserial correlation) is not yet added.
 
 ## Section E: Mathematical framing (addresses "make it a proper mathematical paper")
 

@@ -1,13 +1,19 @@
 """Aggregate results.json across seeds: mean +/- std, and paired significance
 tests between QAT weights_only and the FP16 fine-tuned control (Section D).
 
-Note: proper per-example paired testing (Wilcoxon on per-example NLL) requires
-per-example losses, not just aggregate PPL. This script does both:
-  1. A quick aggregate summary (mean/std PPL and VRAM per config, N=len(SEEDS)).
-  2. If per-example NLL arrays are present in results.json (see --save-per-example
-     in evaluate_perplexity callers), a Wilcoxon signed-rank test between paired
-     configs. Otherwise it falls back to a Welch's t-test on the aggregate seed
-     values with a printed caveat about the low N.
+Two significance tests, in order of preference:
+  1. Real per-example paired Wilcoxon signed-rank test, per seed, using the
+     per_example_nll_path .npy files saved by evaluate_perplexity(
+     return_per_example=True) since the reproducibility work on Day 5 --
+     this pairs the SAME held-out example's NLL under both configs (same
+     seed, same eval set), giving a real sample size (the eval subset size,
+     ~1500) instead of just 3 aggregate points. Reported per seed rather than
+     pooled across seeds, since pooling would mix different training runs'
+     examples as if independent, which they aren't.
+  2. Fallback: Welch's t-test on the 3 aggregate per-seed PPL values, for any
+     run predating the per-example logging (or if a per_example_nll_path is
+     missing/unreadable for some other reason) -- explicitly caveated as too
+     small a sample to trust on its own.
 """
 
 import argparse
@@ -54,7 +60,61 @@ def summarize(model_key: str):
     return rows
 
 
+def _entries_by_seed(data: dict, key: str) -> dict:
+    entries = data.get(key, [])
+    if isinstance(entries, dict):
+        entries = [entries]
+    return {e["seed"]: e for e in entries if "seed" in e and not e.get("skipped")}
+
+
+def wilcoxon_per_seed(model_key: str, config_a: str, config_b: str):
+    """The real test: per seed, pairs config_a's and config_b's per-example
+    NLL (same held-out examples, same seed) and runs a paired Wilcoxon
+    signed-rank test. Returns True if it ran for at least one seed (so the
+    caller knows whether to fall back to the t-test)."""
+    data = load(model_key)
+    by_seed_a = _entries_by_seed(data, config_a)
+    by_seed_b = _entries_by_seed(data, config_b)
+    common_seeds = sorted(set(by_seed_a) & set(by_seed_b))
+
+    ran_any = False
+    verdicts = []
+    for seed in common_seeds:
+        path_a = by_seed_a[seed].get("per_example_nll_path")
+        path_b = by_seed_b[seed].get("per_example_nll_path")
+        if not path_a or not path_b or not os.path.exists(path_a) or not os.path.exists(path_b):
+            continue  # this seed predates per-example logging -- skip, not fail
+        nll_a = np.load(path_a)
+        nll_b = np.load(path_b)
+        if nll_a.shape != nll_b.shape:
+            print(f"  seed={seed}: SKIPPED -- per-example array shape mismatch ({nll_a.shape} vs {nll_b.shape}, "
+                  f"likely different eval_subset_size between when these two runs were produced)")
+            continue
+
+        diff = nll_a - nll_b
+        if np.allclose(diff, 0):
+            print(f"  seed={seed}: identical NLL arrays -- nothing to test (are these the same run twice?)")
+            continue
+
+        stat, p_val = sstats.wilcoxon(nll_a, nll_b)
+        mean_diff = float(diff.mean())
+        direction = f"{config_a} {'lower NLL (better)' if mean_diff < 0 else 'higher NLL (worse)'} than {config_b}"
+        print(f"  seed={seed}: Wilcoxon signed-rank on {len(nll_a)} paired examples: "
+              f"stat={stat:.1f}, p={p_val:.6f}  ({direction}, mean per-example NLL diff={mean_diff:+.5f})")
+        verdicts.append(p_val < 0.05)
+        ran_any = True
+
+    if ran_any:
+        n_sig = sum(verdicts)
+        print(f"  -> significant (p<0.05) in {n_sig}/{len(verdicts)} seeds tested")
+    return ran_any
+
+
 def significance_test(model_key: str, config_a: str, config_b: str):
+    print(f"\n-- {config_a} vs {config_b} --")
+    if wilcoxon_per_seed(model_key, config_a, config_b):
+        return  # real test ran for at least one seed -- don't also print the weaker fallback
+
     data = load(model_key)
 
     def ppls(key):
@@ -70,9 +130,9 @@ def significance_test(model_key: str, config_a: str, config_b: str):
         return
 
     t_stat, p_val = sstats.ttest_ind(a, b, equal_var=False)
-    print(f"  Welch's t-test {config_a} vs {config_b}: t={t_stat:.3f}, p={p_val:.4f}  "
-          f"(CAVEAT: n={len(a)}/{len(b)} seeds is a small sample -- report as directional, "
-          f"and prefer a per-example paired test on NLL if available)")
+    print(f"  No per-example NLL data found for these runs (predates that logging) -- "
+          f"falling back to Welch's t-test on aggregate PPL: t={t_stat:.3f}, p={p_val:.4f}  "
+          f"(CAVEAT: n={len(a)}/{len(b)} seeds is a small sample -- report as directional only)")
 
 
 if __name__ == "__main__":
@@ -85,5 +145,7 @@ if __name__ == "__main__":
         try:
             summarize(m)
             significance_test(m, "qat_weights_only", "fp16_finetuned_control")
+            significance_test(m, "qat_activations_only", "fp16_finetuned_control")
+            significance_test(m, "qat_both", "fp16_finetuned_control")
         except FileNotFoundError:
             print(f"\n=== {m} === no results yet")
