@@ -4,16 +4,28 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 4)
+## Status (updated after Day 5)
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at 0/12 complete, one run mid-flight -- see session-4 report) -- 24/36 training runs done |
-| B: Memory-frontier (QLoRA) | **Not started at all** -- flagged Day 4 as one of 3 fully-unaddressed reviewer critiques |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at 1/12 complete after a real multi-hour VRAM incident + fix -- see session-5 report) -- 25/36 training runs done |
+| B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
 | C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
-| D: Statistics | 🔄 Real Wilcoxon signed-rank test now implemented (Day 4, `stats.py` + per-example NLL logging in `common.py`), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed runs (`backfill_per_example_nll.py`, dry-run verified) and a completed Qwen run to test against |
-| E: Mathematical framing | 🔄 In progress -- see `docs/MATH.md`, now backed by real 2-model data |
-| F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session |
+| D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed runs (`backfill_per_example_nll.py`, dry-run verified) and more completed Qwen runs to test against |
+| E: Mathematical framing | 🔄 In progress -- now backed by real 3-model data, and a real finding that the params-only memory model breaks down for large-vocabulary architectures (Day 5, `docs/MATH.md` §1-2) |
+| F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session; mid-training/eval resumability and per-step visibility added Day 5 |
+
+**Day 5 finding (see `docs/MATH.md` §1-2 and
+`docs/reports/2026-08-30_session-5.md`):** a real multi-hour slowdown on
+Qwen2.5-0.5B was root-caused (not just worked around) to VRAM exceeding the
+6GB card during both training (6.62-9.46 GB measured vs. ~5.1 GB predicted)
+and especially eval (11.47 GB with batch_size=4, fixed to 1.27 GB with
+batch_size=1 -- a 9x reduction, verified empirically, with zero effect on
+results since perplexity is batch-size invariant). Root cause: Qwen's ~3x
+larger vocabulary inflates memory beyond what parameter count alone
+predicts -- the memory-scaling law needs a vocabulary-size term, which is a
+stronger, more defensible finding for the paper than the original
+single-variable law would have been.
 
 **Honest note (Day 4):** completing Section A's matrix answers only 1 of
 the 6 original reviewer critiques (architectural diversity). Sections B and
@@ -59,12 +71,25 @@ Per model:
 
 ## Section B: Memory-frontier study (QAT vs. QLoRA)
 
-Validated rule from real Section-A data (2 of 3 models; see `docs/MATH.md`
-§1 for the fit): peak QAT training VRAM ≈ 9.49 * P + 0.41 (GB). This predicts
-QAT becomes infeasible under 6GB once P > ~0.54-0.59B (`docs/MATH.md` §2) --
-Qwen2.5-0.5B (P=0.494B) is predicted to fit comfortably (~5.1 GB), not be in
-a "danger zone" as an earlier informal estimate suggested before real data
-was available. Pick one model at/above this crossover for the frontier study:
+**Superseded (Day 5, see `docs/MATH.md` §1-2 and
+`docs/reports/2026-08-30_session-5.md` §5): the params-only rule below
+(`9.49 * P + 0.41`) does NOT hold across architecture families.** It
+predicted Qwen2.5-0.5B would fit comfortably (~5.1 GB); real measured
+training peak was 6.62-9.46 GB, causing a genuine multi-hour slowdown
+incident (Windows' shared-GPU-memory fallback under VRAM pressure). Root
+cause: Qwen's ~3x larger vocabulary (152K vs ~50K tokens) inflates the
+final logits/loss tensor beyond what parameter count alone predicts. The
+frontier model below should be chosen and its expected VRAM estimated with
+vocabulary size as a second variable, not parameter count alone -- and its
+eval batch size should be set conservatively (batch_size=1, per the Day 5
+fix in `config.EVAL_BATCH_SIZE`) regardless of what the training-side
+memory estimate suggests, since eval and training peak VRAM are independent
+quantities that must each be checked separately.
+
+Original (still useful within the OPT/Pythia-like small-vocabulary family):
+peak QAT training VRAM ≈ 9.49 * P + 0.41 (GB), predicting QAT becomes
+infeasible under 6GB once P > ~0.54-0.59B. Pick one model at/above this
+crossover for the frontier study:
 
 - TinyLlama-1.1B or SmolLM2-1.7B -- P >= 1.1B, full QAT provably exceeds 6GB.
 

@@ -70,5 +70,36 @@
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
       "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
     }
+  ],
+  "fp16_finetuned_control": [
+    {
+      "perplexity": 18.008937523627456,
+      "peak_vram_mib": 11472.54541015625,
+      "eval_time_s": 24925.208408355713,
+      "n_tokens": 211421,
+      "mean_weight_rel_error": null,
+      "mean_activation_rel_error": null,
+      "strategy": "none",
+      "seed": 42,
+      "n_params": 494032768,
+      "n_layers_replaced": 0,
+      "train_time_s": 52022.13473081589,
+      "peak_train_vram_mib": 9461.4658203125,
+      "steps": 500,
+      "batch_size": 1,
+      "grad_accum_steps": 8,
+      "learning_rate": 1e-05,
+      "resumed_from_checkpoint": true,
+      "git_commit": "85e0a5e",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
   ]
 }

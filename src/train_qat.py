@@ -55,6 +55,7 @@ from common import (
 from config import (
     BATCH_SIZE,
     CHECKPOINT_EVERY_STEPS,
+    EVAL_BATCH_SIZE,
     EVAL_CHECKPOINT_EVERY_BATCHES,
     EVAL_SUBSET_SIZE,
     GRAD_ACCUM_STEPS,
@@ -114,7 +115,7 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     dataloader = get_dataloader(ds, batch_size=BATCH_SIZE, shuffle=True)
     # Fixed, non-shuffled subset shared across every strategy/seed for this
     # model -- see config.EVAL_SUBSET_SIZE for why this isn't the full 10k set.
-    eval_loader = get_dataloader(ds.select(range(min(EVAL_SUBSET_SIZE, len(ds)))), batch_size=4)
+    eval_loader = get_dataloader(ds.select(range(min(EVAL_SUBSET_SIZE, len(ds)))), batch_size=EVAL_BATCH_SIZE)
 
     print(f"  Loading {hf_id} in FP32 for QAT ...")
     model = AutoModelForCausalLM.from_pretrained(hf_id, dtype=torch.float32).to(DEVICE)

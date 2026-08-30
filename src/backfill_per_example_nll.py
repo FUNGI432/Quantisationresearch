@@ -21,7 +21,7 @@ import os
 import torch
 
 from common import evaluate_perplexity, get_dataloader, load_tokenized_dataset, save_per_example_nll
-from config import EVAL_SUBSET_SIZE, RESULTS_DIR
+from config import EVAL_BATCH_SIZE, EVAL_SUBSET_SIZE, RESULTS_DIR
 from eval_downstream import load_trained_checkpoint
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,7 +34,7 @@ def backfill_model(model_key: str, dry_run: bool = False):
         data = json.load(f)
 
     ds = load_tokenized_dataset(model_key)
-    eval_loader = get_dataloader(ds.select(range(min(EVAL_SUBSET_SIZE, len(ds)))), batch_size=4)
+    eval_loader = get_dataloader(ds.select(range(min(EVAL_SUBSET_SIZE, len(ds)))), batch_size=EVAL_BATCH_SIZE)
 
     trained_keys = {"fp16_finetuned_control": "none", "qat_weights_only": "weights_only",
                     "qat_activations_only": "activations_only", "qat_both": "both"}

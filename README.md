@@ -76,10 +76,9 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
 are fully complete. Qwen2.5-0.5B's PTQ baselines are done; its QAT matrix
-hasn't produced a result yet** — a persistent, unexplained slowdown means its
-runs are taking hours instead of the ~20-45 minutes OPT-350M and Pythia-410M
-took (see Known Issues). Session paused deliberately, not reactively;
-resuming is safe (see below).
+has 1 of 12 runs done** after a real multi-hour slowdown incident that was
+root-caused (not just a mystery) and fixed on Day 5 — see Known Issues.
+Session paused deliberately, not reactively; resuming is safe (see below).
 
 **Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
 Section A (the matrix) answers only 1 of the 6 original ACL reviewer
@@ -94,7 +93,7 @@ reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | ⏸️ **0/12 complete** — `none`/seed=42 paused at step 350/500 (5.1 hrs in — see Known Issues on the slowdown pattern), safely checkpointed |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **1/12 complete** — `none`/seed=42 done (PPL=18.01) after a real VRAM incident + fix (see Known Issues); 11 runs remain |
 
 **Overall: 24 of 36 planned QAT training runs complete.**
 
@@ -197,29 +196,53 @@ also settle the weights-only-vs-control question properly — see
 - **AWQ is unavailable on this machine.** `autoawq` requires `triton`, which
   has no compatible Windows wheel for this Python/CUDA combination.
   INT8 dynamic + SmoothQuant stand in as the PTQ baseline family for now.
-- **Intermittent, large slowdowns that now span multiple models and both
-  training and eval phases.** First seen on Pythia-410M's eval (e.g.
-  `both`/seed=1337: 7,528s eval vs. a normal ~150-200s). Then seen on
-  Qwen2.5-0.5B's *training* phase — its first QAT run (`none`/seed=42) ran
-  over 2.5 hours without completing 500 steps, versus the usual 20-45
-  minutes, and was eventually killed deliberately rather than left running
-  indefinitely (see `docs/reports/2026-08-26_session-3.md` §4). GPU stayed
-  near 100% utilization throughout — this is not a hang, just unpredictably
-  slow. No correlation found yet with strategy, model, or training-vs-eval
-  phase. Given it's now recurred three times across two models and both
-  phases of the pipeline, this should be treated as a real, unresolved
-  infrastructure issue rather than isolated noise.
-- **~~No mid-training checkpointing~~ — fixed on Day 3.** `train_qat.py` now
-  saves a full resumable checkpoint (model + FakeQuantize buffers +
-  optimizer state + cumulative elapsed time) every `config.CHECKPOINT_EVERY_STEPS`
-  (default 50) steps, plus immediately on Ctrl+C/SIGTERM. Verified against
-  the realistic case — a hard kill via the harness's `TaskStop` (not a
-  graceful signal) mid-run, then resuming picked up at the correct step with
-  optimizer state intact. See `docs/reports/2026-08-26_session-3.md` §5 for
-  the full verification and an important caveat: the signal-handler path is
-  unconfirmed against a real external kill on Windows (native Windows
-  doesn't reliably deliver SIGTERM the way POSIX does) — the periodic save
-  is what's actually been verified to work, not the interrupt handler.
+- **~~Intermittent, large slowdowns spanning multiple models and both
+  training and eval phases~~ — root-caused and fixed for Qwen on Day 5.**
+  First seen on Pythia-410M's eval (e.g. `both`/seed=1337: 7,528s vs. a
+  normal ~150-200s), then far more severely on Qwen2.5-0.5B, where a single
+  eval pass ran ~7 hours (`none`/seed=42, `docs/reports/2026-08-30_session-5.md`
+  §5). Root cause found via direct GPU profiling rather than left as a
+  mystery: **peak VRAM was exceeding the 6.14 GB card** (training measured
+  6.62-9.46 GB; eval measured 11.47 GB), almost certainly triggering
+  Windows' silent fallback to slow shared (system RAM) memory — which
+  explains why GPU utilization stayed high the whole time despite no real
+  progress being visible. Cause: Qwen's ~3x larger vocabulary (152K vs ~50K
+  tokens) inflates memory beyond what parameter count alone predicts (see
+  `docs/MATH.md` §1). **Fixed and verified**: `config.EVAL_BATCH_SIZE`
+  lowered from 4 to 1, cutting eval's peak VRAM from 11.47 GB to 1.27 GB (a
+  9x reduction) with zero effect on results (perplexity is exactly
+  batch-size invariant). Training's smaller ~1.7 GB overshoot above the
+  fitted prediction was not separately fixed — it's much milder and wasn't
+  the dominant cause. Pythia's original (milder) instance of this pattern
+  is presumably explained by the same general mechanism (VRAM pressure) but
+  wasn't separately re-diagnosed.
+- **~~No mid-training checkpointing~~ — fixed on Day 3, extended to eval on
+  Day 5.** `train_qat.py` saves a full resumable checkpoint (model +
+  FakeQuantize buffers + optimizer state + cumulative elapsed time) every
+  `config.CHECKPOINT_EVERY_STEPS` (lowered from 50 to **10** on Day 5, once
+  a single step was observed taking minutes rather than seconds — see the
+  slowdown item above), plus immediately on Ctrl+C/SIGTERM. Verified against
+  a hard kill via `TaskStop` (Day 3) — resume picked up at the correct step
+  with optimizer state intact. **Day 5**: eval itself was previously *not*
+  resumable at all — a run that finished training but got killed mid-eval
+  had to redo the entire (potentially 10+ hour) training run from scratch.
+  `common.evaluate_perplexity` now accepts a `resume_path` and checkpoints
+  every `config.EVAL_CHECKPOINT_EVERY_BATCHES` (10) batches; the
+  training-phase checkpoint is now kept until eval + results are both fully
+  saved (previously deleted right after training, which was the actual gap).
+  **Caveat**: the eval-resume path is syntax-verified but has not had a
+  dedicated hard-kill test the way the Day 3 training checkpoint did — a
+  genuine test of it is still owed.
+- **~~stdout was silently full-buffered~~ — fixed Day 5.** For most of this
+  project, progress prints didn't appear in real time when piped to a log
+  file (Python's default when stdout isn't a terminal) — explaining a
+  pattern seen repeatedly ("Loading weights: 100%" then silence, then
+  everything at once at completion). Fixed with
+  `sys.stdout.reconfigure(line_buffering=True)` in every entry-point
+  script. Training now also prints every single step (was every 50) and
+  eval prints every 10 batches with a running perplexity estimate — GPU
+  utilization is no longer the only available signal that a run is
+  progressing.
 - **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
   isn't implemented yet~~ — implemented Day 4, not yet exercised on real
   data.** `common.evaluate_perplexity(return_per_example=True)` now logs

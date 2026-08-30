@@ -36,38 +36,77 @@ checkpointing (recomputation trades this for +-20% compute time).
 
 with V_cuda_context ~= 0.5-0.8 GB.
 
-### Empirical validation (real data, 2 of 3 models; Qwen2.5-0.5B pending)
+### Empirical validation (real data, all 3 matrix models) -- the params-only model breaks down on Qwen
 
 Measured `peak_train_vram_mib` from `results/<model>.json`, averaged across
-all 4 QAT configs per model (strategy barely moves this number -- OPT-350M's
-4 configs ranged only 3633-3644 MiB, Pythia-410M's ranged only 4350-4368 MiB
--- confirming the fixed-cost term dominates over the strategy-dependent
-FakeQuantize buffer overhead, as the model predicts):
+all 4 QAT configs per model for OPT-350M/Pythia-410M (strategy barely moves
+this number for them -- OPT-350M's 4 configs ranged only 3633-3644 MiB,
+Pythia-410M's ranged only 4350-4368 MiB -- confirming the fixed-cost term
+dominates over the strategy-dependent FakeQuantize buffer overhead, as the
+model predicts):
 
-| Model | P (M) | Predicted fixed (10P) | Measured peak (mean across 4 configs) | Residual (activations+ctx) |
-|---|---|---|---|---|
-| OPT-350M | 331.2 | 3.31 GB | 3.554 GB | 0.244 GB |
-| Pythia-410M | 405.3 | 4.05 GB | 4.257 GB | 0.207 GB |
-| Qwen2.5-0.5B | 494 | 4.94 GB | *(pending)* | |
+| Model | P (M) | Vocab size | Predicted fixed (10P) | Measured peak (training) | Residual |
+|---|---|---|---|---|---|
+| OPT-350M | 331.2 | ~50,272 | 3.31 GB | 3.554 GB (mean of 4 configs) | 0.244 GB |
+| Pythia-410M | 405.3 | ~50,304 | 4.05 GB | 4.257 GB (mean of 4 configs) | 0.207 GB |
+| Qwen2.5-0.5B | 494.0 | **151,936** | 4.94 GB | **6.62 GB** (clean isolated repro, `none` strategy; see below) | **1.68 GB** |
 
-Fitting `measured = a * P + b` on these 2 points (P in billions, V in GB):
+Qwen's residual (1.68 GB) is **7-8x larger** than OPT's or Pythia's
+(~0.2-0.24 GB) relative to the same `10P` fixed-cost prediction. The
+2-point fit from OPT/Pythia alone (`a=9.49, b=0.41 GB`, see below) predicts
+5.10 GB for Qwen -- still off by 1.52 GB from the measured 6.62 GB. **The
+params-only linear model does not hold for Qwen2.5-0.5B.** The leading
+explanation, found via direct profiling on Day 5
+(`docs/reports/2026-08-30_session-5.md` §5) rather than assumed: Qwen's
+vocabulary is ~3x larger than OPT's/Pythia's (151,936 vs ~50,300), which
+inflates the final logits/loss tensor (shape `[batch, seq_len, vocab_size]`)
+disproportionately to parameter count -- a large vocabulary contributes
+substantial *activation* memory (via the embedding and LM head, and their
+gradients) that scales with `vocab_size`, not just with total `P`, and this
+model's `10P` term only accounts for weights+gradients+optimizer state, not
+this vocabulary-driven activation cost.
+
+**Practical note on the two Qwen numbers in the table**: the real production
+run's *reported* training peak was actually 9.46 GB, not 6.62 GB -- the
+6.62 GB figure is from a clean, isolated synthetic reproduction (same
+batch=1, 8-step grad accumulation, no resume-checkpoint loading involved)
+run specifically to separate "genuine architectural cost" from "possible
+resume-related overhead." The real run's higher number may include overhead
+from loading a mid-training resume checkpoint (untested hypothesis) on top
+of the same underlying vocabulary-driven cost. Both numbers exceed the
+2-point fit's prediction substantially either way -- the qualitative
+conclusion (the linear model needs a vocabulary term) holds regardless of
+which Qwen number is used.
+
+**Revised model** (not yet fitted with real data -- flagged for future
+work, not resolved this session):
+
+  V_peak ≈ 10P + c * V + A_checkpointed(L, B, S, H) + V_cuda_context
+
+where `V` is vocabulary size and `c` is a small per-token-per-vocab-entry
+constant capturing the logits/loss tensor's contribution. With only one
+large-vocabulary data point (Qwen), `c` cannot be fitted yet -- this would
+need at least one more large-vocabulary model in the matrix to separate the
+`P` and `V` terms properly, since for OPT/Pythia the two are confounded
+(their vocab sizes are nearly identical to each other).
+
+### Prior 2-point fit (OPT-350M, Pythia-410M only -- superseded by the above for cross-model prediction)
+
+Fitting `measured = a * P + b` on OPT-350M and Pythia-410M alone (P in
+billions, V in GB):
 
   a = (4.257 - 3.554) / (0.4053 - 0.3312) = 0.703 / 0.0741 ≈ **9.49**
   b = 3.554 - 9.49 * 0.3312 ≈ **0.41 GB**
 
 `a ≈ 9.49` lands almost exactly on the predicted `10` from the byte-counting
 argument in §1 -- strong validation that the fixed-cost model (weights +
-gradients + 8-bit optimizer state, all in the training-precision terms
-assumed above) is the right accounting, not just a coincidence of scale.
-`b ≈ 0.41 GB` is the activation + CUDA-context overhead at this pipeline's
-fixed batch size (1), gradient accumulation (8), and sequence length (512) --
-lower than the original informal 0.5-0.8 GB estimate, plausibly because
-gradient checkpointing is doing more work than that estimate assumed. This is
-a genuine, falsifiable fitted line now (not an assumption) -- the paper can
-present it as Fig. X with these two points and the residual band, and it
-should get a third point from Qwen2.5-0.5B to confirm the line stays straight
-across a third architecture (RoPE + GQA) before treating it as a general law
-rather than a two-point fit.
+gradients + 8-bit optimizer state) is the right accounting for
+similar-vocabulary architectures. `b ≈ 0.41 GB` is the activation +
+CUDA-context overhead at this pipeline's fixed batch size (1), gradient
+accumulation (8), and sequence length (512). This fit remains valid *within*
+the OPT/Pythia-like (small-vocabulary) architecture family, but should NOT
+be used to predict VRAM for a large-vocabulary model like Qwen2.5-0.5B or
+any future frontier model -- see the vocabulary-size discussion above.
 
 ## 2. The QAT-feasibility crossover point
 
@@ -87,13 +126,30 @@ context and OS overhead observed in practice, V_max=5.5 GB: P_max ≈ 0.536 B.)
 This lands close to, but meaningfully higher than, the original informal
 estimate (~0.47-0.5B) -- the refined 2-point fit pushes the predicted ceiling
 up slightly because the real `b` (activation overhead) came in lower than
-assumed. This predicts Qwen2.5-0.5B (0.494B) should still fit comfortably
-(consistent with it being selected as the "safe" third matrix model rather
-than the frontier model), and that TinyLlama-1.1B or larger (Section B's
-frontier model, ≥1.1B) should exceed the 6GB budget by roughly 1.9-2x --
-Section B's frontier experiment tests this directly. Report both this
-predicted `P_max` and the measured OOM point (or lack thereof) side by side
-as the validation of this formula once Section B runs.
+assumed.
+
+**This prediction was tested against real Qwen2.5-0.5B data on Day 5 and did
+NOT hold** (`docs/reports/2026-08-30_session-5.md` §5): P_max here predicts
+Qwen (0.494B) should fit comfortably, but its actual measured training peak
+was 6.62-9.46 GB, well over this machine's 6 GB budget -- see the
+vocabulary-size discussion in §1. **`P_max` computed this way is only valid
+for OPT/Pythia-like (small-vocabulary) architectures**; it does not
+generalize across architecture families the way a true parameter-count-only
+law would need to. This is itself a genuine, reportable finding for the
+paper -- the "how big can a model be under N GB" question has at least two
+independent variables (parameter count AND vocabulary size), not one, which
+is a more interesting and more defensible claim than the original
+single-variable law would have been.
+
+A second, separate discovery from the same investigation: **eval-time peak
+VRAM depends on eval batch size independently of training peak VRAM**, and
+was the dominant factor in a real multi-hour slowdown incident on Qwen
+(eval peaked at 11.47 GB with batch_size=4; dropping to batch_size=1 cut
+this to 1.27 GB, a 9x reduction, with zero effect on the perplexity result
+since it's a token-count-weighted global average and therefore exactly
+batch-size invariant). Any VRAM budget analysis for this pipeline should
+track training-peak and eval-peak as two separate quantities, not one --
+the frontier experiment (Section B) should measure and report both.
 
 ## 3. Why the Straight-Through Estimator treats weights and activations asymmetrically
 

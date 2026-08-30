@@ -14,6 +14,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
+from config import EVAL_BATCH_SIZE
 from prepare_data import resolve_hf_id
 
 sys.stdout.reconfigure(line_buffering=True)  # see train_qat.py's module docstring for why
@@ -91,7 +92,7 @@ def main(model_key: str, max_batches: int = 0, seed: int = 42):
     ds = load_tokenized_dataset(model_key)
     if max_batches > 0:
         ds = ds.select(range(min(max_batches, len(ds))))
-    dataloader = get_dataloader(ds, batch_size=4)
+    dataloader = get_dataloader(ds, batch_size=EVAL_BATCH_SIZE)
 
     print(f"Model: {hf_id}  |  device: {DEVICE}  |  eval examples: {len(ds)}")
     meta = run_metadata()

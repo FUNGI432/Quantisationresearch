@@ -63,6 +63,20 @@ TOKENIZE_SAMPLES = 10_000
 # top of the seed variance we're already trying to measure).
 EVAL_SUBSET_SIZE = 1_500
 
+# Lowered from 4 to 1 after discovering (Day 5) that Qwen2.5-0.5B's eval
+# peaked at 11.47 GB -- nearly double the 6.14 GB card -- causing Windows'
+# CUDA driver to silently fall back to slow shared (system RAM) memory,
+# which is the real explanation for a 7-hour eval that should take ~3
+# minutes (high GPU utilization throughout, since the driver keeps
+# retrying, is NOT a reliable signal that this isn't happening). Root
+# cause: Qwen's ~152K-token vocabulary (vs ~50K for OPT/Pythia) makes the
+# final logits/loss tensor much larger per example than parameter count
+# alone predicts, and eval's batch_size=4 multiplied that by 4x. Perplexity
+# is batch-size invariant (it's a token-count-weighted global average), so
+# this only costs some eval wall-clock time on the two models that didn't
+# need it -- it does not change any result.
+EVAL_BATCH_SIZE = 1
+
 DATASET_NAME = "Salesforce/wikitext"
 DATASET_CONFIG = "wikitext-2-raw-v1"
 
