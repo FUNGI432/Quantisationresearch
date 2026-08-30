@@ -66,8 +66,27 @@ def get_dataloader(ds, batch_size: int, shuffle: bool = False):
 
 
 @torch.no_grad()
-def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_per_example: bool = False):
+def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_per_example: bool = False,
+                         resume_path: str = None, progress_every_batches: int = 10):
     """Global (token-count-weighted) perplexity so padding doesn't bias short batches.
+
+    Prints a live progress line every `progress_every_batches` batches
+    (flushed immediately -- see PYTHONUNBUFFERED note in train_qat.py's
+    module docstring) so a stalled or unusually slow eval is visibly
+    distinguishable from one making normal progress, rather than the only
+    external signal being "is the GPU busy" (not definitive -- a stuck loop
+    that keeps recomputing can look identical to genuine progress from
+    outside). This was added after a real incident where an eval ran 100x+
+    longer than normal with zero visibility into whether it was actually
+    advancing.
+
+    resume_path, if given, makes eval itself resumable at the batch level
+    (mirroring train_qat.py's step-level training checkpointing, which does
+    NOT cover the eval phase -- a real gap found during that incident: once
+    training finishes, its resume checkpoint is deleted, so killing the
+    process mid-eval previously meant redoing the ENTIRE training run, not
+    just re-evaluating). Saves progress every `progress_every_batches`
+    batches; deletes the resume file on successful completion.
 
     return_per_example=True additionally computes one mean-NLL-per-example
     value for every example in the dataloader, in dataloader iteration order.
@@ -76,7 +95,8 @@ def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_pe
     which needs the SAME example's NLL under two different configs, not just
     an aggregate perplexity. Requires the dataloader to be unshuffled (as
     every eval_loader in this codebase already is) so example index i means
-    the same underlying example across two different runs/configs.
+    the same underlying example across two different runs/configs, AND so
+    resuming mid-eval skips to the correct batch rather than a random one.
 
     Computed via manual reduction='none' cross-entropy rather than the
     model's internal `labels=` loss, which only returns a single batch-mean
@@ -88,9 +108,29 @@ def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_pe
     total_nll = 0.0
     total_tokens = 0
     per_example_nll = [] if return_per_example else None
-    start = time.time()
+    start_batch = 0
+    prior_elapsed_s = 0.0
+
+    if resume_path and os.path.exists(resume_path):
+        state = torch.load(resume_path, map_location="cpu")
+        total_nll = state["total_nll"]
+        total_tokens = state["total_tokens"]
+        start_batch = state["batch_idx"]
+        prior_elapsed_s = state.get("elapsed_s", 0.0)
+        if return_per_example:
+            per_example_nll = state["per_example_nll"]
+        print(f"  [{desc}] Found eval resume checkpoint -> resuming from batch {start_batch} "
+              f"(prior partial PPL={float(np.exp(total_nll / total_tokens)):.4f})", flush=True)
+
+    total_batches = len(dataloader)
+    start = time.time() - prior_elapsed_s  # so elapsed/eval_time_s stay cumulative across a resume
+    batch_idx = 0
 
     for batch in dataloader:
+        if batch_idx < start_batch:
+            batch_idx += 1
+            continue  # fast-forward past already-evaluated batches on resume; no model forward, cheap
+
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         labels = input_ids.clone()
@@ -115,11 +155,27 @@ def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_pe
             n_tokens = (labels != -100).sum().item()
             total_nll += outputs.loss.item() * n_tokens
         total_tokens += n_tokens
+        batch_idx += 1
+
+        if batch_idx % progress_every_batches == 0 or batch_idx == total_batches:
+            running_ppl = float(np.exp(total_nll / total_tokens)) if total_tokens > 0 else float("nan")
+            elapsed_so_far = time.time() - start
+            print(f"  [{desc}] eval batch {batch_idx}/{total_batches}  running_PPL={running_ppl:.4f}  "
+                  f"elapsed={elapsed_so_far:.1f}s", flush=True)
+            if resume_path:
+                torch.save({
+                    "batch_idx": batch_idx, "total_nll": total_nll, "total_tokens": total_tokens,
+                    "per_example_nll": per_example_nll, "elapsed_s": elapsed_so_far,
+                }, resume_path + ".tmp")
+                os.replace(resume_path + ".tmp", resume_path)
+
+    if resume_path and os.path.exists(resume_path):
+        os.remove(resume_path)  # completed for real -- no longer needed
 
     elapsed = time.time() - start
     peak_vram = torch.cuda.max_memory_allocated(device) / (1024 ** 2) if device.type == "cuda" else 0.0
     ppl = float(np.exp(total_nll / total_tokens))
-    print(f"  [{desc}] PPL={ppl:.4f}  peak_vram={peak_vram:.1f}MiB  time={elapsed:.1f}s")
+    print(f"  [{desc}] PPL={ppl:.4f}  peak_vram={peak_vram:.1f}MiB  time={elapsed:.1f}s", flush=True)
     result = {"perplexity": ppl, "peak_vram_mib": peak_vram, "eval_time_s": elapsed, "n_tokens": total_tokens}
     if return_per_example:
         result["per_example_nll"] = per_example_nll

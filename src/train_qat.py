@@ -7,23 +7,36 @@ batch size 1, 8 gradient-accumulation steps, bitsandbytes AdamW8bit, gradient
 checkpointing.
 
 Mid-training resumability: a run can be killed at any point (e.g. to free the
-GPU for something urgent) and resumed later from the last checkpoint --
-either the periodic one (every config.CHECKPOINT_EVERY_STEPS steps) or an
-immediate one saved on Ctrl+C / SIGTERM. This saves the FULL model state
-(including FakeQuantize observer buffers, not just trainable params) and the
-optimizer state, so resuming is not a cold restart -- the only thing that
-can't be perfectly restored is the exact data-shuffling order at the pause
-point, which is a strictly smaller source of variation than the seed
-variance this whole study already accounts for (see the conversation this
-was requested in for the full reasoning). Verify this doesn't silently
-regress: docs/reports should note when a run was resumed vs. run straight
-through, in case it ever turns out to matter.
+GPU for something urgent, or because it appears stuck) and resumed later from
+the last checkpoint -- either the periodic one (every
+config.CHECKPOINT_EVERY_STEPS steps) or an immediate one saved on Ctrl+C /
+SIGTERM. This saves the FULL model state (including FakeQuantize observer
+buffers, not just trainable params) and the optimizer state, so resuming is
+not a cold restart -- the only thing that can't be perfectly restored is the
+exact data-shuffling order at the pause point, which is a strictly smaller
+source of variation than the seed variance this whole study already accounts
+for. Eval is ALSO resumable now (common.evaluate_perplexity's resume_path) --
+originally it was not, which meant a run that finished training but got
+killed mid-eval had to redo the entire (multi-hour) training run from
+scratch. Verify this doesn't silently regress: docs/reports should note when
+a run was resumed vs. run straight through, in case it ever turns out to
+matter.
+
+Output buffering: stdout is forced to line-buffered mode below (rather than
+Python's default full-buffering when stdout isn't a TTY, e.g. when piped to
+a log file by a background shell) so progress prints actually appear as they
+happen instead of arriving all at once at process exit. This was a real,
+previously-unnoticed problem: for most of this project's life, per-step and
+per-eval-batch progress was invisible in real time, leaving GPU
+utilization/VRAM as the only (non-definitive -- a stuck loop can look
+identical to genuine progress) external signal that a run was still alive.
 """
 
 import argparse
 import gc
 import os
 import signal
+import sys
 import time
 
 import bitsandbytes as bnb
@@ -42,6 +55,7 @@ from common import (
 from config import (
     BATCH_SIZE,
     CHECKPOINT_EVERY_STEPS,
+    EVAL_CHECKPOINT_EVERY_BATCHES,
     EVAL_SUBSET_SIZE,
     GRAD_ACCUM_STEPS,
     LEARNING_RATE,
@@ -50,6 +64,8 @@ from config import (
 )
 from fakequant import STRATEGIES, inject_fake_quant
 from prepare_data import resolve_hf_id
+
+sys.stdout.reconfigure(line_buffering=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 CHECKPOINT_DIR = "checkpoints"
@@ -65,6 +81,12 @@ def resume_checkpoint_path(model_key: str, strategy: str, seed: int) -> str:
     IN-PROGRESS FP32 checkpoint (model + optimizer + step count) used only
     to resume a killed run, and deleted once training actually finishes."""
     return os.path.join(CHECKPOINT_DIR, f"RESUME_{model_key}_{strategy}_seed{seed}.pt")
+
+
+def eval_resume_checkpoint_path(model_key: str, config_key: str, seed: int) -> str:
+    """The eval-phase equivalent of resume_checkpoint_path -- see
+    common.evaluate_perplexity's resume_path parameter."""
+    return os.path.join(CHECKPOINT_DIR, f"RESUME_EVAL_{model_key}_{config_key}_seed{seed}.pt")
 
 
 def save_resume_checkpoint(path, model, optimizer, step, strategy, elapsed_train_time_s):
@@ -142,11 +164,12 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     model.train()
     data_iter = iter(dataloader)
     start = time.time() - prior_train_time_s  # so train_time below is cumulative across resumes, not just this segment
-    running_loss = 0.0
+    last_step_end = time.time()
 
     try:
         for step in range(start_step, steps):
             optimizer.zero_grad()
+            step_loss = 0.0
             for _ in range(GRAD_ACCUM_STEPS):
                 try:
                     batch = next(data_iter)
@@ -161,13 +184,18 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
                 loss = outputs.loss / GRAD_ACCUM_STEPS
                 loss.backward()
-                running_loss += loss.item()
+                step_loss += loss.item()
 
             optimizer.step()
 
-            if (step + 1) % 50 == 0:
-                print(f"  step {step + 1}/{steps}  loss={running_loss / 50:.4f}")
-                running_loss = 0.0
+            # Every single step, not just every 50 -- when a step can take minutes
+            # instead of seconds (the slowdown incident this responds to), a
+            # 50-step print interval means hours of silence with zero way to tell
+            # whether training is progressing or stuck. This is the heartbeat.
+            now = time.time()
+            print(f"  step {step + 1}/{steps}  loss={step_loss:.4f}  step_time={now - last_step_end:.1f}s  "
+                  f"cumulative={now - start:.1f}s")
+            last_step_end = now
 
             if interrupted["flag"] or (step + 1) % CHECKPOINT_EVERY_STEPS == 0:
                 save_resume_checkpoint(resume_path, model, optimizer, step + 1, strategy, time.time() - start)
@@ -183,8 +211,13 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     peak_train_vram = torch.cuda.max_memory_allocated(DEVICE) / (1024 ** 2)
     print(f"  Training complete: {steps} steps in {train_time:.1f}s, peak VRAM {peak_train_vram:.1f}MiB")
 
-    if os.path.exists(resume_path):
-        os.remove(resume_path)  # training finished for real -- no longer needed
+    # NOTE: the training resume_path is deliberately NOT deleted here anymore
+    # (it used to be, right at this point). It's the only copy of the trained
+    # model weights until the final FP16 checkpoint is saved after eval below
+    # -- deleting it here and then getting killed mid-eval used to mean the
+    # entire training run had to be redone from scratch, since eval's own
+    # resume checkpoint (below) only stores accumulated NLL, not model
+    # weights. It's deleted for real once eval + results are fully saved.
 
     FakeQuantLinear.track_error = False  # don't pollute error log with eval-time noise
     weight_errors = [v for k, vs in FakeQuantLinear.error_log.items() if k.endswith(".weight") for v in vs]
@@ -195,7 +228,11 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     }
 
     key = "fp16_finetuned_control" if strategy == "none" else f"qat_{strategy}"
-    eval_result = evaluate_perplexity(model, eval_loader, DEVICE, desc=f"{strategy}_seed{seed}", return_per_example=True)
+    eval_resume_path = eval_resume_checkpoint_path(model_key, key, seed)
+    eval_result = evaluate_perplexity(
+        model, eval_loader, DEVICE, desc=f"{strategy}_seed{seed}", return_per_example=True,
+        resume_path=eval_resume_path, progress_every_batches=EVAL_CHECKPOINT_EVERY_BATCHES,
+    )
     per_example_nll = eval_result.pop("per_example_nll")
     per_example_path = save_per_example_nll(model_key, key, seed, per_example_nll)
     print(f"  Saved per-example NLL ({len(per_example_nll)} examples) -> {per_example_path}")
@@ -217,6 +254,9 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     })
 
     append_result(model_key, key, eval_result)
+
+    if os.path.exists(resume_path):
+        os.remove(resume_path)  # training + eval both genuinely finished now -- no longer needed
 
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     ckpt_path = checkpoint_path(model_key, strategy, seed)

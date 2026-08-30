@@ -8,12 +8,15 @@ missing dependency blocking every other run.
 
 import argparse
 import gc
+import sys
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
 from prepare_data import resolve_hf_id
+
+sys.stdout.reconfigure(line_buffering=True)  # see train_qat.py's module docstring for why
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

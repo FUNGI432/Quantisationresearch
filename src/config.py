@@ -33,10 +33,19 @@ FRONTIER_MODEL = {
 # --- Shared training hyperparameters -----------------------------------------
 TRAIN_STEPS = 500
 # Save a resumable mid-training checkpoint every N steps, so a run can be
-# killed (to free the GPU for something urgent) and continued later without
-# losing more than a few minutes of progress. Also saved immediately on
-# Ctrl+C / SIGTERM regardless of this interval. See train_qat.py.
-CHECKPOINT_EVERY_STEPS = 50
+# killed (to free the GPU for something urgent, or because it's stuck) and
+# continued later without losing more than a few minutes of progress. Also
+# saved immediately on Ctrl+C / SIGTERM regardless of this interval. See
+# train_qat.py. Lowered from 50 to 10 after a run where 50 steps took over
+# 2 hours during an unexplained slowdown -- 50 was found to be far too
+# coarse a safety margin when a single step can take minutes instead of
+# seconds. The checkpoint write itself (a few GB) takes low single-digit
+# seconds on this machine's disk, so 5x more frequent saves cost negligible
+# overhead relative to the interval length even in the slow case.
+CHECKPOINT_EVERY_STEPS = 10
+# Same reasoning applied to eval, which previously had NO checkpointing at
+# all -- see common.evaluate_perplexity's resume_path parameter.
+EVAL_CHECKPOINT_EVERY_BATCHES = 10
 BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = 8
 MAX_SEQ_LEN = 512

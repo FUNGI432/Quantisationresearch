@@ -44,6 +44,7 @@ elementwise multiply per forward pass instead of a free fold.
 """
 
 import argparse
+import sys
 
 import torch
 import torch.nn as nn
@@ -52,6 +53,8 @@ from transformers import AutoModelForCausalLM
 from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, run_metadata, set_seed
 from fakequant import _make_activation_fake_quant, _make_weight_fake_quant
 from prepare_data import resolve_hf_id
+
+sys.stdout.reconfigure(line_buffering=True)  # see train_qat.py's module docstring for why
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ALPHA = 0.5
