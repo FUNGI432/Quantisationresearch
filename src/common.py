@@ -136,24 +136,25 @@ def evaluate_perplexity(model, dataloader, device, desc: str = "eval", return_pe
         labels = input_ids.clone()
         labels[attention_mask == 0] = -100
 
-        if return_per_example:
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits[:, :-1, :].contiguous()
-            shift_labels = labels[:, 1:].contiguous()
-            per_token_nll = torch.nn.functional.cross_entropy(
-                logits.view(-1, logits.size(-1)), shift_labels.view(-1), ignore_index=-100, reduction="none"
-            ).view(shift_labels.shape)
-            valid = (shift_labels != -100)
-            n_tokens_per_example = valid.sum(dim=1)
-            nll_sum_per_example = per_token_nll.sum(dim=1)
-            for nll_sum, n_tok in zip(nll_sum_per_example.tolist(), n_tokens_per_example.tolist()):
-                per_example_nll.append(nll_sum / n_tok if n_tok > 0 else float("nan"))
-            n_tokens = int(n_tokens_per_example.sum().item())
-            total_nll += float(nll_sum_per_example.sum().item())
-        else:
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            n_tokens = (labels != -100).sum().item()
-            total_nll += outputs.loss.item() * n_tokens
+        with torch.no_grad():
+            if return_per_example:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits[:, :-1, :].contiguous()
+                shift_labels = labels[:, 1:].contiguous()
+                per_token_nll = torch.nn.functional.cross_entropy(
+                    logits.view(-1, logits.size(-1)), shift_labels.view(-1), ignore_index=-100, reduction="none"
+                ).view(shift_labels.shape)
+                valid = (shift_labels != -100)
+                n_tokens_per_example = valid.sum(dim=1)
+                nll_sum_per_example = per_token_nll.sum(dim=1)
+                for nll_sum, n_tok in zip(nll_sum_per_example.tolist(), n_tokens_per_example.tolist()):
+                    per_example_nll.append(nll_sum / n_tok if n_tok > 0 else float("nan"))
+                n_tokens = int(n_tokens_per_example.sum().item())
+                total_nll += float(nll_sum_per_example.sum().item())
+            else:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                n_tokens = (labels != -100).sum().item()
+                total_nll += outputs.loss.item() * n_tokens
         total_tokens += n_tokens
         batch_idx += 1
 

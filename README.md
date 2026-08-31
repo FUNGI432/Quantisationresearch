@@ -76,9 +76,11 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
 are fully complete. Qwen2.5-0.5B's PTQ baselines are done; its QAT matrix
-has 1 of 12 runs done** after a real multi-hour slowdown incident that was
-root-caused (not just a mystery) and fixed on Day 5 — see Known Issues.
-Session paused deliberately, not reactively; resuming is safe (see below).
+has 3 of 12 runs done** (all 3 `none`/control seeds) after a real
+multi-hour slowdown incident that was root-caused and fixed on Day 5, and a
+second, related eval-speed bug found and fixed on Day 6 — see Known Issues.
+Session paused deliberately at a clean run boundary, not reactively;
+resuming is safe (see below).
 
 **Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
 Section A (the matrix) answers only 1 of the 6 original ACL reviewer
@@ -93,9 +95,9 @@ reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **1/12 complete** — `none`/seed=42 done (PPL=18.01) after a real VRAM incident + fix (see Known Issues); 11 runs remain |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **3/12 complete** — all 3 `none`/control seeds done (PPL 18.01 / 14.02 / 14.21) after a real VRAM incident + fix, then a second eval-speed bug found and fixed Day 6 (see Known Issues); 9 runs remain |
 
-**Overall: 24 of 36 planned QAT training runs complete.**
+**Overall: 27 of 36 planned QAT training runs complete.**
 
 ### Results so far
 
@@ -130,15 +132,15 @@ The numbers shifted slightly but the finding didn't change.)*
 | QAT activations-only | 34.54 |
 | QAT both | 34.58 |
 
-**Qwen2.5-0.5B** (PTQ baselines only — QAT matrix paused before its first
-run completed):
+**Qwen2.5-0.5B** (PTQ baselines + all 3 control seeds done; QAT strategies
+not yet run):
 
 | Configuration | Perplexity |
 |---|---|
 | FP16 zero-shot | 21.61 |
 | INT8 PTQ | 21.84 |
 | SmoothQuant PTQ | 88.17 *(broken — see Known Issues; also confirms this isn't Pythia-specific)* |
-| FP16 fine-tuned control | *(pending)* |
+| FP16 fine-tuned control | **18.01 / 14.02 / 14.21** (seeds 42 / 1337 / 2024 — mean 15.41, stdev 2.25) |
 | QAT weights-only | *(pending)* |
 | QAT activations-only | *(pending)* |
 | QAT both | *(pending)* |
@@ -148,6 +150,14 @@ where OPT-350M and Pythia-410M land only *after* 500 steps of fine-tuning —
 a modern, better-pretrained small model needs far less adaptation to the
 target domain. Whether QAT still moves the needle meaningfully at that
 starting point is one more open question the completed matrix will answer.
+
+The control's seed-to-seed spread (~14.6% coefficient of variation) is
+notably wider than OPT-350M or Pythia-410M ever showed (well under 1%).
+Seed=42 (18.01) is the outlier against seeds 1337/2024 (~14.1 average), and
+it's also the seed whose training run hit the Day 5 VRAM-thrashing incident
+— worth treating as an open question for the formal significance test
+rather than either dismissing or over-interpreting on 3 seeds alone (see
+`docs/reports/2026-08-31_session-6.md` §6).
 
 ### What the pattern looks like so far
 
@@ -216,6 +226,25 @@ also settle the weights-only-vs-control question properly — see
   the dominant cause. Pythia's original (milder) instance of this pattern
   is presumably explained by the same general mechanism (VRAM pressure) but
   wasn't separately re-diagnosed.
+- **Day 5's eval-speed fix (`EVAL_BATCH_SIZE=1`) didn't hold up in
+  production — root-caused further and fixed on Day 6.** Day 5 verified a
+  1.27 GB peak / ~80s eval in an isolated fresh-process benchmark; two real
+  Qwen evals this session instead took ~27 min and ~62.5 min, with peak VRAM
+  (~5.65 GB) still sitting right at the 6.14 GB card ceiling. Two
+  compounding bugs found: (1) `common.evaluate_perplexity()` never wrapped
+  its forward passes in `torch.no_grad()` — every eval this entire project
+  has run built an unused autograd graph, wasting memory and compute (this
+  also means Day 5's own benchmark number already included this waste, so
+  the true safety margin was smaller than believed); (2) `train_qat.py`
+  never freed the optimizer (8-bit AdamW state) or training's CUDA cache
+  before calling eval in the same process, so eval was inheriting
+  training's VRAM footprint on top of its own. Both fixed
+  (`torch.no_grad()` added; `del optimizer; gc.collect();
+  torch.cuda.empty_cache()` now runs before eval starts). **Neither run
+  this session could benefit** — `run_matrix.py` is one continuous process
+  per model, so a source-code fix only takes effect on the next fresh
+  launch; this needs confirming on the next run, not assumed. See
+  `docs/reports/2026-08-31_session-6.md` §2-3.
 - **~~No mid-training checkpointing~~ — fixed on Day 3, extended to eval on
   Day 5.** `train_qat.py` saves a full resumable checkpoint (model +
   FakeQuantize buffers + optimizer state + cumulative elapsed time) every
@@ -334,9 +363,11 @@ Verify CUDA:
 
 ## Next steps
 
-1. Finish the Qwen2.5-0.5B QAT matrix (12 training runs — baselines are
-   done). Safe to pause/resume freely now — see mid-training checkpointing
-   above.
+1. Finish the Qwen2.5-0.5B QAT matrix (9 of 12 training runs remain — all 3
+   `none`/control seeds and baselines are done). Confirm the Day 6
+   eval-speed fix actually works on the first fresh run before assuming
+   it's resolved. Safe to pause/resume freely — see mid-training
+   checkpointing above.
 2. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
    Pythia-specific.
 3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.

@@ -68,3 +68,64 @@ Qwen until it's done." It's whether to keep going model-by-model in strict
 sequence, or start the QLoRA and downstream-eval work now, in parallel,
 given how unpredictable Qwen's timing has turned out to be. That's a
 decision for next time, made with clear eyes instead of momentum.
+
+---
+
+## 2026-08-30
+
+The mystery from the previous entry got solved, for real, not just
+worked around. The five-hour-plus stuck-looking eval turned out to be
+exactly what it looked like from the outside but couldn't be proven from
+the outside: the process was genuinely exceeding the 6 GB card and Windows
+was quietly falling back to system RAM, which explains everything --
+high GPU utilization, no crash, no error, just glacial progress with no way
+to distinguish it from a stuck loop except by actually measuring VRAM
+directly, which is what finally happened. The fix (`EVAL_BATCH_SIZE=1`) took
+eval from ~7 hours down to ~80 seconds in the test that verified it. That
+felt like a real, clean win -- the kind where you can point at a before/after
+number and know you actually fixed the thing rather than just moved it.
+
+Decided to continue running the resumed matrix without interruption, and
+to stop asking "how's it going" every few minutes -- both a discipline
+thing (routine step-time noise isn't news) and a trust thing (the
+infrastructure built over the last three days -- checkpointing, resumable
+eval, per-step visibility -- means a bad outcome is recoverable, so there's
+less need to hover).
+
+## 2026-08-31
+
+The "real, clean win" from yesterday turned out to be real but not
+complete. Watching the next two control-seed runs finish, eval took ~27
+minutes and then ~62 minutes -- nowhere near the ~80 seconds the fix was
+supposed to guarantee. The instinct here could easily have been to shrug
+and say "well, it's not the 7-hour disaster anymore, good enough" -- but
+the honest version of "is this method fine, is anything lacking" (a
+question asked back on Day 2, and still the right one to keep asking) meant
+actually finding out why, not just noticing it was better than before.
+
+Two real bugs were sitting in code that had already been trusted: eval was
+quietly building a full backward-pass graph it never used, on every batch,
+for the entire life of this project, and the training process's leftover
+optimizer state was never cleared before eval started borrowing the same
+6 GB. Neither is dramatic on its own. Together, on a card with this little
+headroom, they were enough to erase most of yesterday's fix. It's a good
+reminder that "verified with a clean benchmark" and "verified in
+production" are different claims, and the gap between them is exactly
+where a card this small has no slack to hide it.
+
+Also asked directly, separately from the eval bug: is something in the
+*training* loop's code -- not just VRAM -- causing the noisy step times?
+Went and actually checked (data loading, error-tracking overhead,
+checkpoint I/O) instead of re-asserting the existing VRAM story by default.
+Nothing new turned up. That's a less satisfying entry than "found and fixed
+a bug," but it's the honest one, and it's a different, more earned kind of
+confidence in the VRAM explanation than just repeating it would have been.
+
+Stopped for the day at a genuinely clean boundary -- not mid-run, not a
+kill, but right after a seed's full training-eval-checkpoint cycle
+finished -- after roughly eighteen hours of near-continuous runtime on this
+one matrix. Three of Qwen's twelve QAT runs are done. The two eval bugs
+found today can't help anything that already ran; they'll only prove
+themselves the next time this is picked back up, on the very first fresh
+run. That's next time's first thing to check, not an assumption to carry
+in.

@@ -4,16 +4,30 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 5)
+## Status (updated after Day 6)
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at 1/12 complete after a real multi-hour VRAM incident + fix -- see session-5 report) -- 25/36 training runs done |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **3/12** complete -- all 3 `none`/control seeds, see session-6 report) -- 27/36 training runs done |
 | B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
 | C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
-| D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed runs (`backfill_per_example_nll.py`, dry-run verified) and more completed Qwen runs to test against |
+| D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed OPT/Pythia runs plus Qwen's seed=42 control (`backfill_per_example_nll.py`, dry-run verified) before a paired test can run on Qwen's control seeds as a full set |
 | E: Mathematical framing | 🔄 In progress -- now backed by real 3-model data, and a real finding that the params-only memory model breaks down for large-vocabulary architectures (Day 5, `docs/MATH.md` §1-2) |
-| F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session; mid-training/eval resumability and per-step visibility added Day 5 |
+| F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session; mid-training/eval resumability and per-step visibility added Day 5; two real eval-path bugs (missing `torch.no_grad()`, optimizer/cache not freed before eval) found and fixed Day 6 |
+
+**Day 6 finding (see `docs/reports/2026-08-31_session-6.md`):** Day 5's
+eval-speed fix (`EVAL_BATCH_SIZE=1`) did not hold up in production the way
+its isolated benchmark suggested -- both real evals this session ran
+20-45x slower than the ~80s benchmark figure, with peak VRAM (~5.65 GB)
+still sitting right at the 6.14 GB card ceiling. Root-caused to two
+compounding bugs: `evaluate_perplexity()` never used `torch.no_grad()`
+(building an unused autograd graph on every eval batch, project-wide, since
+the function was first written), and the optimizer/training CUDA cache was
+never freed before eval started in the same process. Both fixed in
+`src/train_qat.py` / `src/common.py`; neither could take effect on the
+runs already in flight (`run_matrix.py` is one continuous process per
+model), so this needs confirming on the very next fresh launch, not
+assumed fixed.
 
 **Day 5 finding (see `docs/MATH.md` §1-2 and
 `docs/reports/2026-08-30_session-5.md`):** a real multi-hour slowdown on

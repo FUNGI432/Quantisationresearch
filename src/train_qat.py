@@ -228,6 +228,17 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
         "mean_activation_rel_error": (sum(act_errors) / len(act_errors)) if act_errors else None,
     }
 
+    # Free the optimizer (8-bit AdamW state) and training-time CUDA cache before
+    # eval starts. Without this, eval inherits training's VRAM footprint on top
+    # of its own -- on Qwen (thin ~6GB margin already), this was enough to push
+    # eval back into the same shared-memory-paging slowdown the batch_size=1
+    # fix was supposed to have eliminated (verified at 1.27GB peak in an
+    # isolated fresh-process benchmark, but that benchmark never had training
+    # memory to contend with in the first place).
+    del optimizer
+    gc.collect()
+    torch.cuda.empty_cache()
+
     key = "fp16_finetuned_control" if strategy == "none" else f"qat_{strategy}"
     eval_resume_path = eval_resume_checkpoint_path(model_key, key, seed)
     eval_result = evaluate_perplexity(
@@ -268,7 +279,7 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     torch.save({"state_dict": cpu_state, "strategy": strategy, "seed": seed}, ckpt_path)
     print(f"  Saved checkpoint (FP16) -> {ckpt_path}")
 
-    del model, optimizer
+    del model
     gc.collect()
     torch.cuda.empty_cache()
     return eval_result
