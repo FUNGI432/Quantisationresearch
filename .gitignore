@@ -9,3 +9,7 @@ data/
 checkpoints/
 
 logs/
+
+# Auto-regenerated every ~10 min while the pipeline runs (src/generate_live_status.py) --
+# pure derived view of results/*.json, would just be commit noise.
+docs/LIVE_STATUS.md
