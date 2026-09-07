@@ -63,7 +63,34 @@ class FakeQuantLinear(nn.Module):
     def _log_error(self, key: str, original: torch.Tensor, quantized: torch.Tensor):
         with torch.no_grad():
             rel_error = (quantized - original).norm() / original.norm().clamp_min(1e-8)
-            FakeQuantLinear.error_log.setdefault(key, []).append(rel_error.item())
+            # Kept as a GPU tensor rather than calling .item() here: .item() forces a
+            # blocking CUDA sync, and this runs once per fake-quantized layer per
+            # microbatch (168 layers x 8 grad-accum steps = 1344 syncs/step for
+            # weights_only alone). Combined with training already sitting at the
+            # edge of the 6GB card, those syncs turned one step into ~54 minutes
+            # (vs. a normal ~45-80s) the first time a QAT strategy actually enabled
+            # error tracking. Converted to floats once, in bulk, after training
+            # finishes (train_qat.py) instead.
+            FakeQuantLinear.error_log.setdefault(key, []).append(rel_error.detach())
+
+    @classmethod
+    def flush_error_log(cls):
+        """Converts any GPU-tensor entries in error_log to plain floats in place.
+
+        Call once per training step (not once per training run) -- deferring
+        ALL the way to the end of a 500-step run would keep every logged
+        tensor alive simultaneously (up to ~672,000 for weights_only, given
+        PyTorch's CUDA allocator rounds even a 4-byte scalar up to its minimum
+        block size), adding real VRAM pressure back on a card already sitting
+        at its ceiling. Flushing every step bounds the live count to one
+        step's worth (~168-336) and still lets a full step's forward/backward
+        work queue up before any blocking sync happens, instead of forcing
+        one every single layer-microbatch.
+        """
+        for values in cls.error_log.values():
+            for i, v in enumerate(values):
+                if isinstance(v, torch.Tensor):
+                    values[i] = v.item()
 
     def forward(self, x):
         weight = self.linear.weight

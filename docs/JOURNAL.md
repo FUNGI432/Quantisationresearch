@@ -129,3 +129,39 @@ found today can't help anything that already ran; they'll only prove
 themselves the next time this is picked back up, on the very first fresh
 run. That's next time's first thing to check, not an assumption to carry
 in.
+
+## 2026-09-06 / 2026-09-07
+
+The very first prediction from last time's entry came true almost
+immediately: the first QAT-strategy run exposed a bug none of the control
+runs ever could have. One step took fifty-four minutes. The instinct to
+just chalk it up to "the VRAM thing again" was strong -- it's the
+explanation that's been right so many times this project -- but the
+magnitude was wrong for that story (an order of magnitude past the worst
+VRAM noise ever seen), and this time there was a real, checkable
+alternative: quantization-error tracking, which only turns on for a real
+QAT strategy, never for the control. Went and read the code instead of
+reaching for the familiar answer, and found it: seventeen hundred syncs a
+step, hiding in a feature that only existed to feed a different part of
+the paper's mathematical section.
+
+This session also had two smaller, quieter lessons. First: got asked to
+stop the GPU immediately, mid-run, for something unrelated -- and it was
+fine, because three days ago a version of this exact question was worked
+through carefully rather than assumed. Second: a fix for one bug introduced
+a new one in the same afternoon (a stale `.item()` call that assumed the
+old code path was still there), and it surfaced as an actual crash a few
+hours later. Caught it, fixed it, and it cost real but bounded time -- not
+a full retraining, just a resume. That's the whole point of building
+checkpointing this carefully: mistakes made *while building the
+infrastructure* get to be cheap too, not just mistakes in the experiment
+itself.
+
+The genuinely open question from today isn't a bug -- it's a result.
+`weights_only` behaved almost identically to its control on seed 42, and
+dramatically worse than its control on seed 1337. That's a bigger seed-to-
+seed swing than this exact configuration ever showed on either of the
+other two models. It might be the most interesting finding of the whole
+Qwen matrix, or it might be an artifact of something not yet understood
+about that specific run. Resisting the urge to explain it before there's a
+third seed to look at.

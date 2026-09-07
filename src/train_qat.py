@@ -146,6 +146,15 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
         resumed = True
         print(f"  Resuming from step {start_step}/{steps} (skipping {start_step} already-completed steps, "
               f"{prior_train_time_s:.1f}s already spent training)")
+        # ckpt holds a full second copy of the model+optimizer state (loaded onto
+        # GPU via map_location=DEVICE) even after load_state_dict() has copied its
+        # values into the live model/optimizer -- left alive, this sat in VRAM for
+        # the rest of the run. Observed adding ~3.8GB (VRAM after setup: 1885MiB
+        # fresh-start vs. 5696MiB after a resume of the identical run), enough on
+        # its own to push training back into the shared-memory-paging slowdown.
+        del ckpt
+        gc.collect()
+        torch.cuda.empty_cache()
 
     print(f"  VRAM after setup: {torch.cuda.memory_allocated(DEVICE) / (1024 ** 2):.1f}MiB")
     torch.cuda.reset_peak_memory_stats(DEVICE)
@@ -189,6 +198,14 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
 
             optimizer.step()
 
+            # Convert this step's logged quantization errors from GPU tensors to
+            # floats now (one batched flush), not per-layer-per-microbatch inside
+            # FakeQuantLinear.forward -- see FakeQuantLinear.flush_error_log's
+            # docstring for why that was silently turning single steps into
+            # 50+ minutes once a QAT strategy (track_error=True) actually ran.
+            if FakeQuantLinear.track_error:
+                FakeQuantLinear.flush_error_log()
+
             # Every single step, not just every 50 -- when a step can take minutes
             # instead of seconds (the slowdown incident this responds to), a
             # 50-step print interval means hours of silence with zero way to tell
@@ -221,8 +238,13 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
     # weights. It's deleted for real once eval + results are fully saved.
 
     FakeQuantLinear.track_error = False  # don't pollute error log with eval-time noise
-    weight_errors = [v for k, vs in FakeQuantLinear.error_log.items() if k.endswith(".weight") for v in vs]
-    act_errors = [v for k, vs in FakeQuantLinear.error_log.items() if k.endswith(".activation") for v in vs]
+    # Values are already plain floats here -- flush_error_log() converts each
+    # step's entries in-place during training (see the per-step call above), so
+    # there's nothing left to sync. isinstance guard is defensive only (e.g. if
+    # a future step ever skips the flush), not the common case.
+    _f = lambda v: v.item() if isinstance(v, torch.Tensor) else v
+    weight_errors = [_f(v) for k, vs in FakeQuantLinear.error_log.items() if k.endswith(".weight") for v in vs]
+    act_errors = [_f(v) for k, vs in FakeQuantLinear.error_log.items() if k.endswith(".activation") for v in vs]
     error_summary = {
         "mean_weight_rel_error": (sum(weight_errors) / len(weight_errors)) if weight_errors else None,
         "mean_activation_rel_error": (sum(act_errors) / len(act_errors)) if act_errors else None,
