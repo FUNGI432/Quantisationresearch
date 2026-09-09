@@ -4,16 +4,33 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 7)
+## Status (updated after Day 8)
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **5/12** complete -- 3 `none` + 2 `weights_only` seeds, see session-7 report) -- 29/36 training runs done |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **6/12 confirmed-good** -- `none` 3/3, `weights_only` 3/3; `activations_only` cleared back to 0/3 after a real numerical-divergence finding, see session-8 report; `both` not yet started) -- 30/36 training runs done |
 | B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
 | C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
 | D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed OPT/Pythia runs plus Qwen's seed=42 control (`backfill_per_example_nll.py`, dry-run verified) before a paired test can run on Qwen's control seeds as a full set |
 | E: Mathematical framing | 🔄 In progress -- now backed by real 3-model data, and a real finding that the params-only memory model breaks down for large-vocabulary architectures (Day 5, `docs/MATH.md` §1-2) |
 | F: Reproducibility | 🔄 Ongoing -- code + results pushed to GitHub after each session; mid-training/eval resumability and per-step visibility added Day 5; two real eval-path bugs (missing `torch.no_grad()`, optimizer/cache not freed before eval) found and fixed Day 6 |
+
+**Day 8 finding (see `docs/reports/2026-09-09_session-8.md`):**
+`activations_only` diverged on 2 of 3 Qwen seeds -- one to PPL~1.2e15, one
+to outright NaN, root-caused precisely to an unclipped-gradient-explosion
+cascade (fully documented step-by-step: loss climbed from 661 to
+~3x10^18 over 17 steps before overflowing to NaN, then stayed NaN
+permanently). The third seed didn't fully diverge but still showed 3
+distinct spike events and a ~426% PPL increase over control -- far beyond
+Pythia's "severe" case (+106%). Fix: standard gradient clipping added
+(`config.GRAD_CLIP_NORM=1.0`, `torch.nn.utils.clip_grad_norm_` before each
+optimizer step) -- its absence was the real anomaly, not its addition.
+All 3 `activations_only` seeds cleared and queued for a redo with
+clipping; `none`/`weights_only` results stand as-is (no spikes in either,
+clipping would be a no-op). The instability itself, independent of
+whether clipping resolves it, is a strong candidate finding: Qwen's
+activation-QAT may be not just worse but numerically *unstable* relative
+to OPT/Pythia.
 
 **Day 7 finding (see `docs/reports/2026-09-07_session-7.md`):** two more
 real VRAM/sync bugs found and fixed, both the same day they first became

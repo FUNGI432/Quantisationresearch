@@ -165,3 +165,50 @@ other two models. It might be the most interesting finding of the whole
 Qwen matrix, or it might be an artifact of something not yet understood
 about that specific run. Resisting the urge to explain it before there's a
 third seed to look at.
+
+## 2026-09-09
+
+`weights_only`'s third seed came in and quietly resolved yesterday's open
+question -- 18.23, close to seed 42's 18.69, which makes seed 1337 the
+outlier rather than the strategy being broadly unstable. That felt like a
+clean, satisfying close to a loose thread. It was also the last clean,
+satisfying thing that happened today.
+
+`activations_only` started, and within the first run it was obvious
+something different was happening -- not the familiar VRAM noise, a real
+loss spike, 43x in a single step. Checked the obvious alternative
+explanation (VRAM) and ruled it out directly rather than assuming. Then
+it happened again, bigger. Then a second seed showed the same pattern,
+tighter and more frequent. Then a third seed took that pattern and didn't
+stop -- watched it, step by step, as the loss went from ordinary to
+hundreds to millions to a number with eighteen digits before the
+floating-point math simply gave up and returned NaN. That's not a
+metaphor for "the training got worse." It's a literal, traceable arithmetic
+event, and it was satisfying in a strange way to watch it happen in real
+time and understand exactly why, rather than just seeing a ruined final
+number days later with no idea how it got there.
+
+The question that came right after wasn't technical, it was about time
+and ownership: keep watching four more hours of a number that was already
+known to be NaN, or ask. Asked. Waited for the answer without touching
+anything, which meant the run kept going and finished exactly as
+predicted -- NaN from step 287 all the way to 500. Nothing was lost by
+waiting; if anything, watching it run to the end removed any doubt about
+whether it might have recovered.
+
+The fix itself is almost anticlimactic after a day like this: gradient
+clipping, a completely standard technique that's honestly more surprising
+in its absence than its presence would be in any other training setup.
+But the harder, more honest part of today wasn't writing that one line --
+it was deciding what to do with the data that already existed. `none` and
+`weights_only` never showed a single spike; leaving those alone and
+redoing only what actually broke, including the one `activations_only`
+seed that *didn't* fully diverge, felt like the right kind of
+carefulness -- not redoing everything reflexively, and not leaving a
+mismatched half-fixed dataset behind either.
+
+Whether clipping actually solves this or just moves the divergence further
+out is genuinely unknown right now, and that's fine to end the day on. Six
+runs are queued for next time, with a very specific thing to check first:
+does the `[grad clip]` log line show up early and often on `activations_only`,
+the way today's uncontrolled logs would have if it had existed then.

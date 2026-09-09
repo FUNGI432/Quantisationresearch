@@ -50,6 +50,12 @@ BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = 8
 MAX_SEQ_LEN = 512
 LEARNING_RATE = 1e-5
+# Added Day 8 after activations_only diverged on 2 of 3 Qwen seeds (one to
+# PPL~1.2e15, one to outright NaN) -- large, sporadic gradient spikes tied
+# to activation FakeQuantize's per-tensor scale reacting to an outlier
+# activation. Standard practice in LLM training regardless; its absence
+# was the real anomaly. 1.0 is the common default, not tuned to this data.
+GRAD_CLIP_NORM = 1.0
 SEEDS = [42, 1337, 2024]
 TOKENIZE_SAMPLES = 10_000
 

@@ -59,6 +59,7 @@ from config import (
     EVAL_CHECKPOINT_EVERY_BATCHES,
     EVAL_SUBSET_SIZE,
     GRAD_ACCUM_STEPS,
+    GRAD_CLIP_NORM,
     LEARNING_RATE,
     RESULTS_DIR,
     TRAIN_STEPS,
@@ -196,6 +197,9 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
                 loss.backward()
                 step_loss += loss.item()
 
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+            if grad_norm > GRAD_CLIP_NORM:
+                print(f"  [grad clip] step {step + 1}: norm={grad_norm:.2f} > max={GRAD_CLIP_NORM} -- clipped")
             optimizer.step()
 
             # Convert this step's logged quantization errors from GPU tensors to

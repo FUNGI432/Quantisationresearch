@@ -75,12 +75,13 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 ## Current status
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
-are fully complete. Qwen2.5-0.5B's PTQ baselines are done; its QAT matrix
-has 5 of 12 runs done** (3 `none`/control seeds + 2 `weights_only` seeds)
-after a real multi-hour slowdown incident root-caused and fixed on Day 5,
-two more VRAM/sync bugs found and fixed on Day 6 and Day 7, and one
-self-inflicted bug from a Day 7 fix caught the same session — see Known
-Issues. `weights_only`/seed=2024 is in progress.
+are fully complete. Qwen2.5-0.5B's PTQ baselines are done; 6 of 12 QAT
+runs are confirmed good** (`none` 3/3, `weights_only` 3/3). `activations_only`
+was run and then deliberately cleared back to 0/3 on Day 8 after 2 of its 3
+seeds diverged numerically (one to PPL~1.2e15, one to outright NaN) — a
+real, root-caused finding (unclipped gradient explosion), not a bug in the
+usual sense. Gradient clipping has been added and `activations_only` +
+`both` (not yet started) are queued to run with it — see Known Issues.
 
 **Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
 Section A (the matrix) answers only 1 of the 6 original ACL reviewer
@@ -95,9 +96,9 @@ reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **5/12 complete** — 3 `none`/control seeds (PPL 18.01 / 14.02 / 14.21) + 2 `weights_only` seeds (PPL 18.69 / 28.91 — large, unexplained seed discrepancy, see below); several VRAM/sync bugs found and fixed Day 6-7 (see Known Issues); 7 runs remain |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **6/12 confirmed good** — `none` 3/3 (PPL 18.01 / 14.02 / 14.21), `weights_only` 3/3 (PPL 18.69 / 28.91 / 18.23); `activations_only` diverged on 2/3 seeds and was cleared for a redo with gradient clipping (Day 8, see Known Issues); `both` not started; 6 runs remain |
 
-**Overall: 29 of 36 planned QAT training runs complete.**
+**Overall: 30 of 36 planned QAT training runs complete (confirmed-good).**
 
 ### Results so far
 
@@ -141,8 +142,8 @@ not yet run):
 | INT8 PTQ | 21.84 |
 | SmoothQuant PTQ | 88.17 *(broken — see Known Issues; also confirms this isn't Pythia-specific)* |
 | FP16 fine-tuned control | **18.01 / 14.02 / 14.21** (seeds 42 / 1337 / 2024 — mean 15.41, stdev 2.25) |
-| QAT weights-only | **18.69 / 28.91** (seeds 42 / 1337 — seed=2024 in progress; large unexplained spread, see below) |
-| QAT activations-only | *(pending)* |
+| QAT weights-only | **18.69 / 28.91 / 18.23** (seeds 42 / 1337 / 2024) |
+| QAT activations-only | *(cleared — 2 of 3 seeds diverged numerically on the first attempt; queued for a redo with gradient clipping, see Known Issues)* |
 | QAT both | *(pending)* |
 
 Notably, Qwen2.5-0.5B's zero-shot FP16 perplexity (21.61) is already close to
@@ -254,6 +255,27 @@ also settle the weights-only-vs-control question properly — see
   per model, so a source-code fix only takes effect on the next fresh
   launch; this needs confirming on the next run, not assumed. See
   `docs/reports/2026-08-31_session-6.md` §2-3.
+- **`activations_only` diverged numerically on 2 of 3 Qwen seeds — root-caused
+  and fixed with gradient clipping on Day 8.** Never seen on `none` or
+  `weights_only` (max loss there was 5.59 across all seeds). Seed 42 showed 3
+  distinct loss spikes (up to 232.6x its baseline) that never fully
+  recovered, landing at PPL=94.75 (~426% over control — far beyond even
+  Pythia-410M's "severe" activation-sensitivity case of +106%). Seed 1337
+  effectively collapsed (PPL≈1.23×10^15). Seed 2024 fully diverged, tracked
+  precisely step-by-step: loss climbed from 661 to ~3×10^18 over 17 steps
+  before overflowing to NaN at step 287, then stayed NaN for the rest of
+  training (NaN is permanent once it enters Adam's momentum/variance state —
+  verified directly, not assumed). **Fix**: standard gradient clipping
+  (`config.GRAD_CLIP_NORM=1.0`, `torch.nn.utils.clip_grad_norm_` before each
+  optimizer step, logged whenever it actually engages) — its absence was the
+  real anomaly here, not its addition; this is standard practice in
+  essentially all LLM/QAT training. All 3 `activations_only` seeds were
+  cleared from results and queued for a redo with clipping (including
+  seed=42, since it also showed spikes and should be trained under identical
+  conditions to the other two). `none`/`weights_only` results were
+  deliberately left as-is — neither ever showed a spike, and clipping is a
+  no-op when the gradient norm is already under the threshold. See
+  `docs/reports/2026-09-09_session-8.md`.
 - **Two more real VRAM/sync bugs found and fixed on Day 7, both on the very
   first run that could expose them.** (1) `FakeQuantLinear._log_error()`
   called `.item()` (a blocking CUDA sync) on every fake-quantized layer's
@@ -402,9 +424,11 @@ Verify CUDA:
 
 ## Next steps
 
-1. Finish the Qwen2.5-0.5B QAT matrix (7 of 12 training runs remain).
-   Investigate the large, unexplained `weights_only` seed=42-vs-1337 PPL
-   discrepancy once seed=2024 completes (third data point). Safe to
+1. Finish the Qwen2.5-0.5B QAT matrix (6 of 12 training runs remain: all 3
+   `activations_only` seeds need a redo with gradient clipping, then all 3
+   `both` seeds). Confirm whether clipping actually resolves the
+   `activations_only` divergence or just delays/reduces it — check the
+   `[grad clip]` log lines against the loss trajectory once redone. Safe to
    pause/resume freely — see mid-training checkpointing above.
 2. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
    Pythia-specific.

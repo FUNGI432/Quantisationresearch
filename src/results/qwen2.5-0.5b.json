@@ -253,5 +253,6 @@
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
       "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
     }
-  ]
+  ],
+  "qat_activations_only": []
 }
