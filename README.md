@@ -275,7 +275,21 @@ also settle the weights-only-vs-control question properly — see
   conditions to the other two). `none`/`weights_only` results were
   deliberately left as-is — neither ever showed a spike, and clipping is a
   no-op when the gradient norm is already under the threshold. See
-  `docs/reports/2026-09-09_session-8.md`.
+  `docs/reports/2026-09-09_session-8.md`. **Day 9 update**: the fix is
+  confirmed working in production, not just compiling -- the
+  `activations_only`/seed=42 redo held a normal, bounded loss (3.2-4.5)
+  through 115 steps with zero spikes and zero NaN, versus the original
+  unclipped run which had already spiked 3 times by that point. One
+  precise correction made along the way: gradient clipping is engaging on
+  **100% of steps observed so far** (114/114), not tapering off as
+  initially (incorrectly) reported in chat — every window's clip count
+  just happened to equal that window's step count. This means clipping
+  is acting as a continuous rescaling of every update for this
+  configuration, not an occasional catch of rare outliers. Not itself a
+  red flag (clipping preserves gradient direction, so it can't be the
+  mechanism that corrupts training the way the original explosion did),
+  but a real, more precise characterization worth keeping accurate — see
+  `docs/reports/2026-09-13_session-9.md`.
 - **Two more real VRAM/sync bugs found and fixed on Day 7, both on the very
   first run that could expose them.** (1) `FakeQuantLinear._log_error()`
   called `.item()` (a blocking CUDA sync) on every fake-quantized layer's

@@ -212,3 +212,36 @@ out is genuinely unknown right now, and that's fine to end the day on. Six
 runs are queued for next time, with a very specific thing to check first:
 does the `[grad clip]` log line show up early and often on `activations_only`,
 the way today's uncontrolled logs would have if it had existed then.
+
+## 2026-09-13
+
+The clipping fix got its first real test today, and it held. Step 1
+of the redo needed clipping (a gradient norm 121 times over threshold),
+and the run just... kept going. A hundred and fifteen steps in, still no
+spike, still no NaN, still a boring normal loss number -- which, after
+watching that number climb to eighteen digits four days ago, is a genuinely
+satisfying kind of boring.
+
+The more interesting moment today wasn't the fix working, it was catching
+my own sloppy read of *how* it was working. I'd been reporting the clip
+count per ten-minute window and said out loud that it looked like it was
+"tapering off" -- fewer clips in later windows than the first one. The
+user asked a simple, direct question back: "so all of them are clipping?"
+That's the kind of question that only gets asked when someone is actually
+tracking the numbers rather than trusting the summary, and it was the
+right instinct -- checking properly showed every single window had the
+same ratio as the first one. Nothing had tapered. I'd been comparing raw
+counts across windows of different lengths without noticing the windows
+themselves were the same length the whole time, which made a flat 100%
+line look like a downward slope.
+
+That's worth sitting with for a second, the same way the original
+divergence was. It wasn't a big mistake, and it didn't change any
+decision -- the fix is still working regardless of whether the clip rate
+is 100% or 60%. But it's exactly the kind of small, confident,
+unverified claim that this project has tried hard not to let slide,
+going all the way back to the first session's "we didn't crash, so it's
+probably fine." Getting asked a plain question and having to actually go
+check, rather than getting to just restate the summary more confidently,
+is the mechanism that catches this -- not some higher level of personal
+care the second time around.

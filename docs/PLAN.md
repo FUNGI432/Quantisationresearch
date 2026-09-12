@@ -4,7 +4,18 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 8)
+## Status (updated after Day 9)
+
+**Day 9 (see `docs/reports/2026-09-13_session-9.md`):** gradient clipping
+(added Day 8) confirmed working in production -- `activations_only`/seed=42
+redo held a bounded, spike-free loss through 115 steps where the original
+unclipped run had already diverged 3 times. Precise correction made along
+the way: clipping is engaging on 100% of steps so far, not tapering off as
+first (incorrectly) reported -- a continuous rescaling of every update for
+this config, not an occasional outlier catch. Not a red flag (clipping
+preserves gradient direction), but the accurate characterization, not the
+initially-reported one.
+
 
 | Section | Status |
 |---|---|
