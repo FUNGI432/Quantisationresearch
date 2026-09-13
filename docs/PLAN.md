@@ -220,3 +220,14 @@ all 3 seeds if time allows) + both models in Section B.
 - Section C: several hours, parallelizable / can run overnight, subsampled
 - Total: ~2-3 days of laptop time across sessions (revised: likely more,
   given the above)
+
+**Actual measured total, Day 9 (not an estimate -- summed directly from
+every run's recorded `train_time_s`/`eval_time_s`):** ~133.2 GPU-hours
+(~5.5 days of continuous compute) spent on Section A across all 3 models
+so far, of which **~27.2 hours (20%) was ultimately discarded** -- the 3
+unclipped `activations_only` Qwen attempts before gradient clipping was
+added (Day 8): seed=42 spiked to PPL=94.75 (6.78 hrs, later redone with
+clipping), seed=1337 collapsed to PPL~1.2e15 (8.77 hrs), seed=2024
+diverged to NaN (11.63 hrs). This had never been aggregated into one
+number before this session; it's logged here as the actual answer, not a
+revised estimate.
