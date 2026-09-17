@@ -4,7 +4,19 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 9)
+## Status (updated after Day 10)
+
+**Day 10:** `both`/seed=42 and seed=1337 completed cleanly (PPL 31.81 /
+29.58), clipping engaged throughout, no spikes -- `activations_only`'s Day
+8/9 fix holds for `both` too. `activations_only`'s redo also finished all
+3 seeds (PPL 28.74 / 31.80 / 32.15). `both`/seed=2024 -- the 12th and
+final Qwen QAT run -- was stopped mid-training by request at step 250/500
+(loss normal, 3.2-4.8 range, no spikes/NaN). The stop was a hard kill, not
+a graceful signal the training loop's interrupt handler could catch, so
+recovery relied on the periodic `CHECKPOINT_EVERY_STEPS=10` checkpoint
+rather than an immediate on-interrupt save -- verified directly by loading
+`RESUME_qwen2.5-0.5b_both_seed2024.pt` (`step: 250`), confirming only 3
+steps (~410s) of progress were actually lost. Resume and finish is next.
 
 **Day 9 (see `docs/reports/2026-09-13_session-9.md`):** gradient clipping
 (added Day 8) confirmed working in production -- `activations_only`/seed=42
@@ -19,7 +31,7 @@ initially-reported one.
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **6/12 confirmed-good** -- `none` 3/3, `weights_only` 3/3; `activations_only` cleared back to 0/3 after a real numerical-divergence finding, see session-8 report; `both` not yet started) -- 30/36 training runs done |
+| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **11/12 confirmed-good, 1 in progress** -- `none` 3/3, `weights_only` 3/3, `activations_only` 3/3 (redone with gradient clipping); `both` 2/3, seed=2024 mid-training (step 250/500, stopped cleanly Day 10)) -- 35/36 training runs done or in progress |
 | B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
 | C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
 | D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed OPT/Pythia runs plus Qwen's seed=42 control (`backfill_per_example_nll.py`, dry-run verified) before a paired test can run on Qwen's control seeds as a full set |

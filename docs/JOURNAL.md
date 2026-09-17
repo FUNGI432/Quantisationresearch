@@ -245,3 +245,31 @@ probably fine." Getting asked a plain question and having to actually go
 check, rather than getting to just restate the summary more confidently,
 is the mechanism that catches this -- not some higher level of personal
 care the second time around.
+
+## 2026-09-17
+
+Eleven of the twelve Qwen runs are in, and the fix held for all of them --
+`activations_only`'s redo finished all three seeds clean, and `both`'s
+first two seeds came in clean as well, no spikes, no NaN, nothing that
+needed a second look. That's the payoff of Day 8 and 9 actually showing up
+in the data rather than just in the log lines: six runs went by this
+session without a single moment of "wait, is this okay?"
+
+The twelfth run -- the very last one needed to close this matrix -- got
+stopped on purpose, mid-training, at step 250 of 500, because it was time
+to stop for the day. That's a completely ordinary thing to do at this
+point in the project, and it was worth actually checking rather than
+trusting on faith: this stop was a hard kill, not the polite signal the
+checkpointing code is built to catch, and the honest question was whether
+that mattered. It didn't turn out to, but "didn't turn out to" is only a
+real answer once you've loaded the checkpoint and read the step number
+back out, which is what happened -- 250, three steps behind where the
+process actually was when it died. Three steps is nothing. But the whole
+point of building resumability this carefully, several sessions ago, was
+so that a question like this could be answered with a number instead of a
+shrug.
+
+So the matrix ends today at 11 of 12, one clean resume away from done.
+That's a good, clear place to stop -- closer to finished than confused,
+and with the next action (resume, finish, then actually sit down and
+decide what comes after Section A) obvious rather than improvised.

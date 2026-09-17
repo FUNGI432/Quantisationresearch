@@ -75,13 +75,16 @@ Full software version list in [`docs/reports/2026-08-23_session-1.md`](docs/repo
 ## Current status
 
 **2 of 3 models in the architectural-diversity matrix (Section A of the plan)
-are fully complete. Qwen2.5-0.5B's PTQ baselines are done; 6 of 12 QAT
-runs are confirmed good** (`none` 3/3, `weights_only` 3/3). `activations_only`
-was run and then deliberately cleared back to 0/3 on Day 8 after 2 of its 3
-seeds diverged numerically (one to PPL~1.2e15, one to outright NaN) — a
-real, root-caused finding (unclipped gradient explosion), not a bug in the
-usual sense. Gradient clipping has been added and `activations_only` +
-`both` (not yet started) are queued to run with it — see Known Issues.
+are fully complete. Qwen2.5-0.5B's PTQ baselines are done; 11 of 12 QAT
+runs are confirmed good, 1 in progress** (`none` 3/3, `weights_only` 3/3,
+`activations_only` 3/3). `activations_only` was run, then deliberately
+cleared back to 0/3 on Day 8 after 2 of its 3 seeds diverged numerically
+(one to PPL~1.2e15, one to outright NaN) — a real, root-caused finding
+(unclipped gradient explosion), not a bug in the usual sense. Gradient
+clipping (`GRAD_CLIP_NORM=1.0`) was added and confirmed working in
+production on the redo (Day 9). `both` is now 2/3 done (seed=42 PPL 31.81,
+seed=1337 PPL 29.58); seed=2024 is mid-training (stopped cleanly at step
+250/500 on Day 10, resumable) — see Known Issues.
 
 **Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
 Section A (the matrix) answers only 1 of the 6 original ACL reviewer
@@ -96,9 +99,9 @@ reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
 |---|---|---|
 | **OPT-350M** (learned position embeddings, MHA) | ✅ done | ✅ **12/12 done**, eval-set-consistency fixed on Day 3 |
 | **Pythia-410M** (learned position embeddings, MHA, fused QKV) | ✅ done (SmoothQuant result anomalous — flagged, not yet debugged) | ✅ **12/12 done** |
-| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **6/12 confirmed good** — `none` 3/3 (PPL 18.01 / 14.02 / 14.21), `weights_only` 3/3 (PPL 18.69 / 28.91 / 18.23); `activations_only` diverged on 2/3 seeds and was cleared for a redo with gradient clipping (Day 8, see Known Issues); `both` not started; 6 runs remain |
+| **Qwen2.5-0.5B** (RoPE, GQA) | ✅ done (SmoothQuant also anomalous here — see Known Issues) | 🔄 **11/12 confirmed good, 1 in progress** — `none` 3/3 (PPL 18.01 / 14.02 / 14.21), `weights_only` 3/3 (PPL 18.69 / 28.91 / 18.23), `activations_only` 3/3 redone with gradient clipping (PPL 28.74 / 31.80 / 32.15); `both` 2/3 (PPL 31.81 / 29.58), seed=2024 mid-training (step 250/500, stopped cleanly Day 10) |
 
-**Overall: 30 of 36 planned QAT training runs complete (confirmed-good).**
+**Overall: 35 of 36 planned QAT training runs complete or in progress (34 confirmed-good, 1 resumable mid-run).**
 
 ### Results so far
 
@@ -133,8 +136,8 @@ The numbers shifted slightly but the finding didn't change.)*
 | QAT activations-only | 34.54 |
 | QAT both | 34.58 |
 
-**Qwen2.5-0.5B** (PTQ baselines + all 3 control seeds done; QAT strategies
-not yet run):
+**Qwen2.5-0.5B** (PTQ baselines + all 3 control seeds done; QAT matrix
+11/12, `both`/seed=2024 mid-training):
 
 | Configuration | Perplexity |
 |---|---|
@@ -143,8 +146,8 @@ not yet run):
 | SmoothQuant PTQ | 88.17 *(broken — see Known Issues; also confirms this isn't Pythia-specific)* |
 | FP16 fine-tuned control | **18.01 / 14.02 / 14.21** (seeds 42 / 1337 / 2024 — mean 15.41, stdev 2.25) |
 | QAT weights-only | **18.69 / 28.91 / 18.23** (seeds 42 / 1337 / 2024) |
-| QAT activations-only | *(cleared — 2 of 3 seeds diverged numerically on the first attempt; queued for a redo with gradient clipping, see Known Issues)* |
-| QAT both | *(pending)* |
+| QAT activations-only | **28.74 / 31.80 / 32.15** (seeds 42 / 1337 / 2024 — redone with gradient clipping after the Day 8 divergence, see Known Issues) |
+| QAT both | **31.81 / 29.58 /** *(seed=2024 in progress, step 250/500)* (seeds 42 / 1337 / 2024) |
 
 Notably, Qwen2.5-0.5B's zero-shot FP16 perplexity (21.61) is already close to
 where OPT-350M and Pythia-410M land only *after* 500 steps of fine-tuning —
@@ -289,7 +292,17 @@ also settle the weights-only-vs-control question properly — see
   red flag (clipping preserves gradient direction, so it can't be the
   mechanism that corrupts training the way the original explosion did),
   but a real, more precise characterization worth keeping accurate — see
-  `docs/reports/2026-09-13_session-9.md`.
+  `docs/reports/2026-09-13_session-9.md`. **Day 10 update**: `both`/seed=42
+  and seed=1337 completed cleanly (PPL 31.81 / 29.58) with clipping engaged
+  throughout and no spikes; seed=2024 (the 12th and final Qwen QAT run) was
+  stopped mid-training by request at step 250/500, loss holding normal
+  (3.2-4.8 range) with no spikes or NaN. Stop was a hard kill (not a
+  graceful Ctrl+C/SIGTERM the training loop's interrupt handler could
+  catch), so the periodic `CHECKPOINT_EVERY_STEPS=10` resume checkpoint was
+  used rather than an immediate one — verified directly by loading the
+  checkpoint (`step: 250`), confirming only 3 steps (~410s) of progress
+  were lost, not the whole in-between window. Will resume from step 250 to
+  finish the matrix.
 - **Two more real VRAM/sync bugs found and fixed on Day 7, both on the very
   first run that could expose them.** (1) `FakeQuantLinear._log_error()`
   called `.item()` (a blocking CUDA sync) on every fake-quantized layer's
@@ -438,12 +451,11 @@ Verify CUDA:
 
 ## Next steps
 
-1. Finish the Qwen2.5-0.5B QAT matrix (6 of 12 training runs remain: all 3
-   `activations_only` seeds need a redo with gradient clipping, then all 3
-   `both` seeds). Confirm whether clipping actually resolves the
-   `activations_only` divergence or just delays/reduces it — check the
-   `[grad clip]` log lines against the loss trajectory once redone. Safe to
-   pause/resume freely — see mid-training checkpointing above.
+1. Finish the Qwen2.5-0.5B QAT matrix (1 of 12 training runs remain:
+   `both`/seed=2024, stopped mid-training at step 250/500, resumable from
+   checkpoint). Once complete, evaluate current standing and decide next
+   steps deliberately rather than rolling straight into Section B/C — see
+   `docs/JOURNAL.md`.
 2. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
    Pythia-specific.
 3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
