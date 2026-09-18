@@ -67,11 +67,14 @@ def _entries_by_seed(data: dict, key: str) -> dict:
     return {e["seed"]: e for e in entries if "seed" in e and not e.get("skipped")}
 
 
-def wilcoxon_per_seed(model_key: str, config_a: str, config_b: str):
+def wilcoxon_per_seed(model_key: str, config_a: str, config_b: str, records: list = None):
     """The real test: per seed, pairs config_a's and config_b's per-example
     NLL (same held-out examples, same seed) and runs a paired Wilcoxon
     signed-rank test. Returns True if it ran for at least one seed (so the
-    caller knows whether to fall back to the t-test)."""
+    caller knows whether to fall back to the t-test). If `records` is
+    passed, appends one dict per seed actually tested -- used by
+    full_significance_report() to pool every test's p-value for a
+    multiple-comparisons correction, rather than reading each in isolation."""
     data = load(model_key)
     by_seed_a = _entries_by_seed(data, config_a)
     by_seed_b = _entries_by_seed(data, config_b)
@@ -103,11 +106,60 @@ def wilcoxon_per_seed(model_key: str, config_a: str, config_b: str):
               f"stat={stat:.1f}, p={p_val:.6f}  ({direction}, mean per-example NLL diff={mean_diff:+.5f})")
         verdicts.append(p_val < 0.05)
         ran_any = True
+        if records is not None:
+            records.append({
+                "model": model_key, "config_a": config_a, "config_b": config_b, "seed": seed,
+                "n": len(nll_a), "p_val": p_val, "mean_diff": mean_diff, "direction": direction,
+            })
 
     if ran_any:
         n_sig = sum(verdicts)
         print(f"  -> significant (p<0.05) in {n_sig}/{len(verdicts)} seeds tested")
     return ran_any
+
+
+def benjamini_hochberg(records: list, alpha: float = 0.05) -> list:
+    """Benjamini-Hochberg FDR correction across every per-seed test pooled
+    together (PLAN.md Section D / paper outline Methodology E: "explicitly
+    address multiple comparisons" rather than reading each p-value alone).
+    Adds 'q_val' and 'significant_fdr' to each record in place, and returns
+    the same list sorted by raw p-value (ascending)."""
+    ordered = sorted(records, key=lambda r: r["p_val"])
+    m = len(ordered)
+    prev_q = 1.0
+    for i in range(m - 1, -1, -1):
+        rank = i + 1
+        q = ordered[i]["p_val"] * m / rank
+        prev_q = min(prev_q, q)  # step-up procedure: q-values must be monotone non-decreasing with rank
+        ordered[i]["q_val"] = min(prev_q, 1.0)
+    for r in ordered:
+        r["significant_fdr"] = bool(r["q_val"] < alpha)
+    return ordered
+
+
+def full_significance_report(model_keys: list, alpha: float = 0.05):
+    """Runs every (model, strategy) vs. control Wilcoxon test across the
+    given models, pools all resulting per-seed p-values, and applies one
+    Benjamini-Hochberg correction across the whole set -- the total number
+    of tests run is stated explicitly rather than left implicit."""
+    records = []
+    for m in model_keys:
+        for strategy_key in ("qat_weights_only", "qat_activations_only", "qat_both"):
+            wilcoxon_per_seed(m, strategy_key, "fp16_finetuned_control", records=records)
+
+    print(f"\n=== Multiple-comparisons correction (Benjamini-Hochberg FDR, alpha={alpha}) ===")
+    print(f"Total per-seed Wilcoxon tests pooled: {len(records)}")
+    corrected = benjamini_hochberg(records, alpha=alpha)
+    n_sig_raw = sum(1 for r in corrected if r["p_val"] < alpha)
+    n_sig_fdr = sum(1 for r in corrected if r["significant_fdr"])
+    print(f"Significant at raw p<{alpha}: {n_sig_raw}/{len(records)}   "
+          f"Significant after FDR correction: {n_sig_fdr}/{len(records)}")
+    print(f"\n{'model':14s} {'config_a':22s} seed  n     p_val      q_val     fdr_sig  mean_diff  direction")
+    for r in corrected:
+        print(f"{r['model']:14s} {r['config_a']:22s} {r['seed']:<5d} {r['n']:<5d} "
+              f"{r['p_val']:<10.6f} {r['q_val']:<9.6f} {str(r['significant_fdr']):<8s} "
+              f"{r['mean_diff']:+.5f}  {r['direction']}")
+    return corrected
 
 
 def significance_test(model_key: str, config_a: str, config_b: str):
@@ -138,9 +190,21 @@ def significance_test(model_key: str, config_a: str, config_b: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", choices=list(MATRIX_MODELS.keys()) + ["all"], default="all")
+    parser.add_argument("--full-report", action="store_true",
+                         help="pool every per-seed Wilcoxon test across the given model(s) and apply a single "
+                              "Benjamini-Hochberg FDR correction, saving the result to results/significance_report.json")
     args = parser.parse_args()
 
     models = list(MATRIX_MODELS.keys()) if args.model == "all" else [args.model]
+
+    if args.full_report:
+        corrected = full_significance_report(models)
+        out_path = os.path.join(RESULTS_DIR, "significance_report.json")
+        with open(out_path, "w") as f:
+            json.dump(corrected, f, indent=2)
+        print(f"\nSaved -> {out_path}")
+        raise SystemExit(0)
+
     for m in models:
         try:
             summarize(m)

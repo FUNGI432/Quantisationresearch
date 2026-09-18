@@ -14,7 +14,7 @@ from lm_eval import simple_evaluate
 from lm_eval.models.huggingface import HFLM
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config import RESULTS_DIR
+from common import append_result, run_metadata
 from fakequant import STRATEGIES, inject_fake_quant
 from prepare_data import resolve_hf_id
 from train_qat import checkpoint_path
@@ -58,13 +58,20 @@ def run(model_key: str, strategy: str, tasks: list, limit: int, seed: int):
 
     results = simple_evaluate(model=lm, tasks=tasks, limit=limit, random_seed=seed, numpy_random_seed=seed)
 
-    summary = {task: res for task, res in results["results"].items()}
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    out_path = os.path.join(RESULTS_DIR, f"{model_key}_downstream_{strategy}.json")
-    with open(out_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"Saved downstream results -> {out_path}")
-    print(json.dumps(summary, indent=2))
+    metrics = {task: res for task, res in results["results"].items()}
+    payload = {
+        "seed": seed,
+        "strategy": strategy,
+        "tasks": tasks,
+        "limit": limit,
+        "metrics": metrics,
+        **run_metadata(),
+    }
+    key = f"downstream_{strategy}"
+    append_result(model_key, key, payload)
+    del model
+    torch.cuda.empty_cache()
+    print(json.dumps(metrics, indent=2, default=str))
 
 
 if __name__ == "__main__":

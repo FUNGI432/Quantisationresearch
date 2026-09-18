@@ -1,20 +1,23 @@
 # Quantization Sensitivity Varies by Architecture: A Multi-Model Study of Selective Quantization-Aware Training Under a Consumer-GPU Memory Budget
 
-**Status: INCOMPLETE DRAFT, first full pass — 2026-09-18.** This is the first
-time the project's accumulated results and mathematical framing have been
+**Status: DRAFT, updated Day 12 — 2026-09-18/19.** This is the first time
+the project's accumulated results and mathematical framing have been
 assembled into paper form, immediately after Section A's 3-model QAT matrix
-reached 36/36 completed training runs. It follows the structure of
-`docs/PAPER_OUTLINE.md` (post-review-round-1 revision). Sections are written
-in full where real data exists; sections with no data yet are marked
-**[NOT YET RUN]** rather than filled with placeholder numbers. Treat every
-number below as sourced directly from `results/*.json` in this repository
-(commit `6cdf383`) unless stated otherwise — nothing here is invented or
-extrapolated beyond what is explicitly labeled as a fit or estimate.
+reached 36/36 completed training runs; updated the same session once
+Section D's significance testing was actually run on real data (not just
+implemented). It follows the structure of `docs/PAPER_OUTLINE.md`
+(post-review-round-1 revision). Sections are written in full where real
+data exists; sections with no data yet are marked **[NOT YET RUN]** rather
+than filled with placeholder numbers. Treat every number below as sourced
+directly from `results/*.json` in this repository unless stated otherwise
+— nothing here is invented or extrapolated beyond what is explicitly
+labeled as a fit or estimate.
 
 **What is done, going into this draft:** Section A (36/36 QAT training runs
-across 3 models, all PTQ baselines, all controls). **What is not:** Section
-B (memory-frontier/QLoRA), Section C (downstream lm-eval-harness), Section
-D's significance testing (implemented, not yet executed on real data). This
+across 3 models, all PTQ baselines, all controls) and Section D (the full
+Wilcoxon significance battery with a Benjamini-Hochberg multiple-comparisons
+correction, run on real data as of Day 12). **What is not:** Section B
+(memory-frontier/QLoRA) and Section C (downstream lm-eval-harness). This
 draft exists to make that boundary concrete and to surface what the
 completed data actually says, so the next-steps conversation has a real
 document to react to rather than a status table.
@@ -34,8 +37,12 @@ architecture families at matched scale: a mild +3.9% perplexity increase
 on OPT-350M versus a severe +106.2% increase on Pythia-410M and +100.4% on
 Qwen2.5-0.5B (all relative to each model's own control; absolute terms,
 bits/token, tell the same story: +0.055 vs. +1.044 vs. +1.003). This
-variation survives being reported in both relative and absolute terms and
-is far larger than seed-to-seed noise for OPT and Pythia. Separately, we
+variation survives being reported in both relative and absolute terms, is
+far larger than seed-to-seed noise for OPT and Pythia, and — now backed by
+a full battery of 24 paired Wilcoxon signed-rank tests on held-out
+per-example NLL with a Benjamini-Hochberg multiple-comparisons correction
+— is statistically significant in all 18 activation-involving comparisons
+tested (q<0.05, most at p<10⁻⁶). Separately, we
 show that a claimed "QAT-as-regularizer" effect (weight-only QAT beating an
 unquantized control), visible in this project's original single-seed
 predecessor study, does not survive proper 3-seed evaluation on OPT-350M
@@ -212,23 +219,29 @@ error-asymmetry analysis in Section V.F / Discussion. 168 Linear layers are
 replaced per model (`lm_head`/`embed_out` excluded from quantization in all
 three architectures).
 
-**E. Statistical methodology — [PARTIALLY COMPLETE].** Three seeds per
-trained configuration; mean ± standard deviation reported for every
-configuration (Section V.C). A per-example paired Wilcoxon signed-rank
-test on held-out NLL (`stats.py::wilcoxon_per_seed()`, backed by
-`common.evaluate_perplexity(return_per_example=True)`) is implemented and
-was validated in a dry run, but **has not yet been executed on the full
-completed dataset** — it requires backfilling per-example NLL for OPT/
-Pythia runs recorded before per-example logging existed
-(`backfill_per_example_nll.py`, dry-run verified, not yet run at scale) and
-a dedicated GPU-idle window. No p-values are reported in this draft; where
-Section V describes an effect as "large" or "small," that is a
-mean-and-standard-deviation comparison, not yet a statistically tested
-claim, and this document says so explicitly rather than implying
-significance testing has occurred. A multiple-comparisons correction
-(e.g., Benjamini-Hochberg) is planned for whenever the test battery
-actually runs, given the number of pairwise comparisons across 3 models ×
-3 strategies.
+**E. Statistical methodology.** Three seeds per trained configuration;
+mean ± standard deviation reported for every configuration (Section V.C).
+A per-example paired Wilcoxon signed-rank test on held-out NLL
+(`stats.py::wilcoxon_per_seed()`, backed by
+`common.evaluate_perplexity(return_per_example=True)`) was run for every
+(model, QAT strategy, seed) triple with available per-example data — 24 of
+27 possible triples (Qwen2.5-0.5B `weights_only`/seed=42 lacks per-example
+data due to an unrelated, previously documented crash-recovery gap, see
+Appendix XI). OPT-350M and Pythia-410M's 24 runs needed their per-example
+NLL backfilled from saved checkpoints (`backfill_per_example_nll.py`),
+since per-example logging was added to the pipeline after those two
+matrices finished; Qwen's per-example NLL was captured live during
+training and needed no backfill. **A data-quality caveat surfaced by the
+backfill's own built-in sanity check, reported here rather than
+suppressed**: the backfilled per-example NLL for Pythia-410M's
+`activations_only`/`both` configurations carries a small, systematic,
+*conservative* (damage-understating) bias of 1.9-2.75%, and OPT-350M's
+equivalent configurations carry a much smaller 0.1-0.3% version of the
+same bias — full mechanism and evidence in Appendix XI. All 24 raw and
+FDR-corrected p-values, per seed, are pooled into one
+Benjamini-Hochberg multiple-comparisons correction
+(`stats.py::full_significance_report()`) rather than being read in
+isolation — results in Section V.D.
 
 **F. Reproducibility infrastructure.** Every result records exact
 hyperparameters, seed, and git commit hash (`common.run_metadata()`).
@@ -365,9 +378,38 @@ Pythia's), suggesting whatever is driving the weights-only and control
 variance is specific to those two configurations, not a general Qwen
 instability.
 
-### D. Significance testing — **[NOT YET RUN]**
+### D. Significance testing
 
-See Methodology III.E. No p-values are reported in this draft.
+24 per-seed paired Wilcoxon signed-rank tests (n=1,500 paired examples
+each) across 3 models × 3 QAT strategies vs. their matched control,
+Benjamini-Hochberg corrected as one pooled family (Methodology III.E):
+
+**21 of 24 tests are significant after correction (q<0.05); zero tests
+that were significant at raw p<0.05 were overturned by the correction.**
+Every single `activations_only` and `both` comparison — all 3 models, all
+available seeds, 18 tests total — is significant, most at p<10⁻⁶. The 3
+non-significant results are all `weights_only` vs. control:
+
+| Model | Seed | Raw p | FDR q | Mean NLL diff | Verdict |
+|---|---|---|---|---|---|
+| OPT-350M | 42 | 0.301 | 0.301 | −0.0004 (weights-only *lower*) | Not significant |
+| Pythia-410M | 1337 | 0.053 | 0.057 | +0.0038 | Not significant |
+| Pythia-410M | 42 | 0.055 | 0.057 | +0.0530 | Not significant |
+
+This is the statistical backing the "regularizer effect fragility" claim
+(Section V.B) needed and did not have until now: `weights_only` vs.
+control is the *only* comparison in the entire battery where the null
+hypothesis (no difference) survives correction, and it does so specifically
+on OPT-350M's seed=42 (the seed configuration closest to this project's
+original single-seed predecessor study) and on 2 of Pythia's 3 seeds.
+OPT-350M's other two weights-only seeds (1337: p=0.019; 2024: p<10⁻⁴) and
+both of Qwen's testable weights-only seeds (1337: p<10⁻⁶; 2024: p<10⁻⁶) *do*
+reach significance — so even the weights-only story is not uniformly
+"no effect," it is inconsistently significant in a way that a single-seed
+study could not have revealed either way. The headline
+architecture-dependence finding (Section V.E) is now standing on tested,
+corrected significance, not an eyeballed mean comparison: full results in
+`results/significance_report.json`.
 
 ### E. The headline cross-architecture comparison, relative and absolute terms
 
@@ -691,6 +733,32 @@ with standard gradient clipping (Day 8) and confirmed working in
 production, including a self-caught reporting error where clip frequency
 was initially misreported as declining when it was in fact a constant
 100% (Day 9).
+
+**A checkpoint-precision bug found and fixed while backfilling per-example
+NLL (Day 12).** `train_qat.py` originally cast every floating-point tensor
+in the final checkpoint to FP16, including `FakeQuantize`'s calibrated
+`scale`/`zero_point`/`min_val`/`max_val` buffers — rounding a single
+per-tensor activation-quantization scale value that the original,
+already-recorded perplexity was computed *without* rounding. Re-evaluating
+these already-cast checkpoints (necessary to backfill OPT-350M's and
+Pythia-410M's per-example NLL, Section III.E) surfaced this directly:
+recomputed PPL was consistently *lower* than the originally stored value,
+every time, only for configurations involving activation quantization.
+Effect size tracks the same architecture-dependent pattern as this paper's
+headline finding — negligible (<0.1 PPL, no warning) for `none`/
+`weights_only` on both models; small (0.1-0.3%) for OPT-350M's
+`activations_only`/`both`; 6-27x larger (1.9-2.75%) for the same
+configurations on Pythia-410M. This is independent corroborating evidence
+for the compounding-error-across-depth mechanism proposed in Section VI:
+whatever architectural property makes Pythia amplify real
+activation-quantization noise so much more than OPT also amplifies this
+small, unrelated FP16-rounding artifact by roughly the same relative
+margin. The bias is conservative (understates rather than overstates
+activation-QAT damage) and small enough not to change this paper's
+conclusions, but is reported explicitly rather than silently absorbed;
+`train_qat.py` was fixed the same day to keep these calibration buffers at
+FP32 in all future checkpoints, so this cannot recur for Section B or any
+future retraining.
 
 **Code and data availability**: this repository
 (`https://github.com/FUNGI432/Quantisationresearch`, commit `6cdf383` as

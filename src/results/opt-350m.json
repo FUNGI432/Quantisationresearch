@@ -27,7 +27,8 @@
       "optimizer": "bitsandbytes.optim.AdamW8bit",
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
-      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_weights_only_seed1337.npy"
     },
     {
       "perplexity": 21.051630208864065,
@@ -56,7 +57,8 @@
       "optimizer": "bitsandbytes.optim.AdamW8bit",
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
-      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_weights_only_seed42.npy"
     },
     {
       "perplexity": 21.14811396765097,
@@ -74,7 +76,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_weights_only_seed2024.npy"
     }
   ],
   "fp16_zero_shot": [
@@ -135,7 +138,8 @@
       "optimizer": "bitsandbytes.optim.AdamW8bit",
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
-      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+      "per_example_nll_path": "results\\per_example\\opt-350m_fp16_finetuned_control_seed42.npy"
     },
     {
       "perplexity": 21.04414593421239,
@@ -164,7 +168,8 @@
       "optimizer": "bitsandbytes.optim.AdamW8bit",
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
-      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+      "per_example_nll_path": "results\\per_example\\opt-350m_fp16_finetuned_control_seed1337.npy"
     },
     {
       "perplexity": 21.0043358215548,
@@ -193,7 +198,8 @@
       "optimizer": "bitsandbytes.optim.AdamW8bit",
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
-      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver",
+      "per_example_nll_path": "results\\per_example\\opt-350m_fp16_finetuned_control_seed2024.npy"
     }
   ],
   "qat_activations_only": [
@@ -213,7 +219,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_activations_only_seed42.npy"
     },
     {
       "perplexity": 21.8854105540462,
@@ -231,7 +238,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_activations_only_seed1337.npy"
     },
     {
       "perplexity": 21.88517797688567,
@@ -249,7 +257,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_activations_only_seed2024.npy"
     }
   ],
   "qat_both": [
@@ -269,7 +278,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_both_seed42.npy"
     },
     {
       "perplexity": 21.96350054168171,
@@ -287,7 +297,8 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_both_seed1337.npy"
     },
     {
       "perplexity": 21.958275504771496,
@@ -305,7 +316,59 @@
       "steps": 500,
       "batch_size": 1,
       "grad_accum_steps": 8,
-      "learning_rate": 1e-05
+      "learning_rate": 1e-05,
+      "per_example_nll_path": "results\\per_example\\opt-350m_qat_both_seed2024.npy"
+    }
+  ],
+  "downstream_none": [
+    {
+      "seed": 42,
+      "strategy": "none",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 21.194611583038807,
+          "perplexity_stderr,none": 2.3233708860452187,
+          "acc,none": 0.402,
+          "acc_stderr,none": 0.021948929609938706
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.676,
+          "acc_stderr,none": 0.020950557312477556,
+          "acc_norm,none": 0.64,
+          "acc_norm_stderr,none": 0.02148775108972057
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.378,
+          "acc_stderr,none": 0.02170655082451827,
+          "acc_norm,none": 0.424,
+          "acc_norm_stderr,none": 0.022122993778135334
+        }
+      },
+      "git_commit": "2530a96",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
     }
   ]
 }

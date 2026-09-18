@@ -298,12 +298,26 @@ def train_one(model_key: str, strategy: str, seed: int, steps: int = TRAIN_STEPS
 
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     ckpt_path = checkpoint_path(model_key, strategy, seed)
+    # Weights/gradient-adjacent buffers go to FP16 to keep checkpoints small, but
+    # FakeQuantize's calibrated scale/zero_point/min_val/max_val must stay FP32:
+    # a re-evaluation of this checkpoint later (see backfill_per_example_nll.py)
+    # replays the forward pass through these exact buffers, and rounding a
+    # single per-tensor activation scale to FP16 measurably shifts perplexity
+    # -- up to ~2.75% on Pythia-410M's activations_only/both (a downward,
+    # conservative bias, but a real and avoidable one), found via the Day 12
+    # backfill's own sanity check. Effect was negligible on OPT-350M and on
+    # weight-only quantization (per-channel scales, tighter range), consistent
+    # with this project's compounding-error-across-depth hypothesis -- but
+    # "usually negligible" isn't a reason to keep rounding it.
+    _FAKE_QUANT_FP32_SUFFIXES = ("fake_quant.scale", "fake_quant.zero_point",
+                                 "activation_post_process.min_val", "activation_post_process.max_val")
     cpu_state = {
-        k: (v.detach().half().cpu() if v.is_floating_point() else v.detach().cpu())
+        k: (v.detach().cpu() if (v.is_floating_point() and k.endswith(_FAKE_QUANT_FP32_SUFFIXES))
+            else v.detach().half().cpu() if v.is_floating_point() else v.detach().cpu())
         for k, v in model.state_dict().items()
     }
     torch.save({"state_dict": cpu_state, "strategy": strategy, "seed": seed}, ckpt_path)
-    print(f"  Saved checkpoint (FP16) -> {ckpt_path}")
+    print(f"  Saved checkpoint (FP16, FakeQuantize calibration kept FP32) -> {ckpt_path}")
 
     del model
     gc.collect()
