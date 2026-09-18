@@ -6,11 +6,16 @@ tokenizes on the fly -- avoids CPU-bottlenecking the laptop during QAT runs.
 
 import argparse
 import os
+import sys
 
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from config import DATASET_NAME, DATASET_CONFIG, MAX_SEQ_LEN, TOKENIZE_SAMPLES, DATA_DIR, MATRIX_MODELS, FRONTIER_MODEL
+
+# See train_qat.py's docstring: without this, progress prints don't appear in
+# real time when stdout isn't a TTY (e.g. piped through `tail`).
+sys.stdout.reconfigure(line_buffering=True)
 
 
 def resolve_hf_id(model_key: str) -> str:

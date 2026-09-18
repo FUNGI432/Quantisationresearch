@@ -8,6 +8,7 @@
 
 import argparse
 import gc
+import sys
 import time
 
 import torch
@@ -15,8 +16,15 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 from common import append_result, evaluate_perplexity, get_dataloader, load_tokenized_dataset, set_seed
-from config import BATCH_SIZE, FRONTIER_MODEL, GRAD_ACCUM_STEPS, LEARNING_RATE, TRAIN_STEPS
+from config import BATCH_SIZE, EVAL_BATCH_SIZE, EVAL_SUBSET_SIZE, FRONTIER_MODEL, GRAD_ACCUM_STEPS, LEARNING_RATE, TRAIN_STEPS
 from fakequant import inject_fake_quant
+
+# See train_qat.py's docstring: without this, progress prints don't appear in
+# real time when stdout isn't a TTY (e.g. piped through `tail`) -- this
+# script's full_qat_attempt has no per-step logging at all, so this matters
+# even more here: it's the difference between "still loading" and "silently
+# hung" being distinguishable at all from the log alone.
+sys.stdout.reconfigure(line_buffering=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_KEY = "frontier"
@@ -47,9 +55,10 @@ def attempt_full_qat(steps: int = TRAIN_STEPS):
         torch.cuda.reset_peak_memory_stats(DEVICE)
         model.train()
         data_iter = iter(dataloader)
+        print(f"   VRAM after setup: {torch.cuda.memory_allocated(DEVICE) / (1024 ** 2):.1f}MiB")
         for step in range(min(steps, 20)):  # short probe -- OOM shows up fast if it's going to
             optimizer.zero_grad()
-            for _ in range(GRAD_ACCUM_STEPS):
+            for micro in range(GRAD_ACCUM_STEPS):
                 try:
                     batch = next(data_iter)
                 except StopIteration:
@@ -61,6 +70,8 @@ def attempt_full_qat(steps: int = TRAIN_STEPS):
                 labels[attention_mask == 0] = -100
                 loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
                 (loss / GRAD_ACCUM_STEPS).backward()
+                print(f"   step {step + 1}/{min(steps, 20)} microbatch {micro + 1}/{GRAD_ACCUM_STEPS}: "
+                      f"loss={loss.item():.4f}  VRAM={torch.cuda.memory_allocated(DEVICE) / (1024 ** 2):.1f}MiB")
             optimizer.step()
 
         peak = torch.cuda.max_memory_allocated(DEVICE) / (1024 ** 3)
@@ -84,6 +95,13 @@ def run_qlora(steps: int = TRAIN_STEPS, lora_r: int = 16):
     set_seed(42)
     ds = load_tokenized_dataset(MODEL_KEY)
     dataloader = get_dataloader(ds, batch_size=BATCH_SIZE, shuffle=True)
+    # Same fixed, non-shuffled EVAL_SUBSET_SIZE subset train_qat.py uses for
+    # every Section-A run (config.py) -- NOT a held-out split (train_qat.py's
+    # own eval subset overlaps the shuffled training data too), but using the
+    # same fixed subset size keeps this directly comparable to Section A's
+    # numbers and avoids the ~10k-example, ~20+ minute full-set eval this
+    # originally ran (mirroring the exact reasoning in config.EVAL_SUBSET_SIZE).
+    eval_loader = get_dataloader(ds.select(range(min(EVAL_SUBSET_SIZE, len(ds)))), batch_size=EVAL_BATCH_SIZE)
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -135,7 +153,7 @@ def run_qlora(steps: int = TRAIN_STEPS, lora_r: int = 16):
     train_time = time.time() - start
     peak_train_vram = torch.cuda.max_memory_allocated(DEVICE) / (1024 ** 2)
 
-    eval_result = evaluate_perplexity(model, dataloader, DEVICE, desc="qlora")
+    eval_result = evaluate_perplexity(model, eval_loader, DEVICE, desc="qlora")
     eval_result.update({
         "trainable_params": trainable,
         "total_params": total,

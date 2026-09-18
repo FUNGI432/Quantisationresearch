@@ -1,26 +1,25 @@
 # Quantization Sensitivity Varies by Architecture: A Multi-Model Study of Selective Quantization-Aware Training Under a Consumer-GPU Memory Budget
 
-**Status: DRAFT, updated Day 12 — 2026-09-18/19.** This is the first time
+**Status: DRAFT, updated Day 13 — 2026-09-18/19.** This is the first time
 the project's accumulated results and mathematical framing have been
 assembled into paper form, immediately after Section A's 3-model QAT matrix
-reached 36/36 completed training runs; updated the same session once
-Section D's significance testing was actually run on real data (not just
-implemented). It follows the structure of `docs/PAPER_OUTLINE.md`
-(post-review-round-1 revision). Sections are written in full where real
-data exists; sections with no data yet are marked **[NOT YET RUN]** rather
-than filled with placeholder numbers. Treat every number below as sourced
-directly from `results/*.json` in this repository unless stated otherwise
-— nothing here is invented or extrapolated beyond what is explicitly
-labeled as a fit or estimate.
+reached 36/36 completed training runs; updated the same session as Section
+D (significance testing), Section C (downstream eval), and Section B
+(memory-frontier QAT-vs-QLoRA) were each run on real data in turn. It
+follows the structure of `docs/PAPER_OUTLINE.md` (post-review-round-1
+revision). Sections are written in full where real data exists. Treat
+every number below as sourced directly from `results/*.json` in this
+repository unless stated otherwise — nothing here is invented or
+extrapolated beyond what is explicitly labeled as a fit or estimate.
 
-**What is done, going into this draft:** Section A (36/36 QAT training runs
-across 3 models), Section D (the full Wilcoxon significance battery with a
-Benjamini-Hochberg correction), and Section C (36/36 downstream zero-shot
-eval runs — LAMBADA/PIQA/HellaSwag, all confirmed complete as of Day 12).
-**What is not:** Section B (memory-frontier/QLoRA). This draft exists to
-make that boundary concrete and to surface what the completed data
-actually says, so the next-steps conversation has a real document to
-react to rather than a status table.
+**What is done, going into this draft:** Sections A, B, C, and D are all
+complete as of Day 12/13 — the full 3-model QAT matrix, the memory-frontier
+QAT-vs-QLoRA comparison, downstream zero-shot evaluation, and real
+significance testing with a multiple-comparisons correction. This draft
+exists to surface what the completed data actually says, so the
+next-steps conversation (Sections E/F polish, the open research questions,
+or a genuinely new direction) has a real, load-bearing document to react
+to rather than a status table.
 
 ---
 
@@ -68,9 +67,11 @@ breadth-over-depth design rather than being a headline result. Downstream
 zero-shot evaluation (LAMBADA/PIQA/HellaSwag) independently confirms the
 headline finding and surfaces a new wrinkle on Qwen2.5-0.5B (weight-only
 QAT costs real downstream accuracy there despite modest perplexity
-impact). The memory-frontier QAT-vs-QLoRA comparison (Section B) is
-designed and implemented but **not yet run** — this is stated plainly
-rather than described as complete.
+impact). The memory-frontier comparison (a 1.1B-parameter model) shows a
+clean, directly observed crossover: full QAT does not fit this 6GB card at
+all (a Windows VRAM-oversubscription slowdown rather than a clean OOM,
+but a genuine failure either way), while QLoRA fits comfortably (1.33 of
+6.14 GB used), training only 0.41% of the model's parameters.
 
 ---
 
@@ -122,20 +123,27 @@ not conflated:
    root-caused on one architecture and observed to recur, unresolved, on a
    second — an explicitly open problem, not a solved one (Section V.A,
    Discussion).
+5. A directly observed (not merely predicted) crossover point at which
+   practitioners must switch from full QAT to a parameter-efficient method
+   under a fixed VRAM budget: a 1.1B-parameter model's full-QAT attempt
+   fails on this 6GB card while QLoRA fits training under 0.5% of its
+   parameters — including the finding that the failure manifests as a
+   driver-level slowdown rather than a clean out-of-memory exception on
+   this Windows setup (Section V.G).
 
 **Engineering / reproducibility artifacts** (enabling infrastructure, not
 headline claims):
 
-5. A memory-optimized selective-QAT pipeline (gradient checkpointing,
+6. A memory-optimized selective-QAT pipeline (gradient checkpointing,
    8-bit AdamW, gradient accumulation) with mid-training/eval checkpointing
    verified against a real, unplanned hard-kill scenario, making
    long-running, interruptible research tractable on a single
    non-dedicated laptop GPU (Section III.F, Appendix XI).
-6. A fully open, reproducible pipeline: code, per-seed results, per-example
+7. A fully open, reproducible pipeline: code, per-seed results, per-example
    evaluation data, and a complete session-by-session engineering log
-   (`docs/reports/`, ten sessions as of this draft) documenting every bug
-   found and fixed along the way, including the ones introduced by our own
-   fixes.
+   (`docs/reports/`, twelve sessions as of this draft) documenting every
+   bug found and fixed along the way, including the ones introduced by our
+   own fixes.
 
 ---
 
@@ -520,14 +528,51 @@ quantization, or some interaction not yet identified) plausibly matters as
 much as or more than raw per-layer error size. This is flagged as an open
 question, not resolved here (Section VIII).
 
-### G. Memory-frontier study (QAT vs. QLoRA) — **[NOT YET RUN]**
+### G. Memory-frontier study (QAT vs. QLoRA)
 
-Designed (Section II of `docs/PLAN.md`) but not started. The original
-params-only crossover estimate (P_max ≈ 0.536-0.589B under this machine's
-budget) is now known to be invalid for large-vocabulary architectures
-(Section V.F) and would need re-deriving with a vocabulary-aware model, or
-explicit acknowledgment that the frontier model choice is not yet
-justified by a validated formula.
+TinyLlama-1.1B (1.1B params, RoPE, GQA — chosen per `docs/PLAN.md` Section
+II as comfortably above the ~0.54-0.59B crossover the 2-point OPT/Pythia
+fit predicted; that fit is now known invalid for large-vocabulary
+architectures, Section V.F, but TinyLlama's ~32K vocabulary is smaller
+than all three Section A models', so if anything this understates how far
+over budget full QAT would be here — a conservative choice of frontier
+model, not an inflated one).
+
+**Full QAT attempt**: predicted fixed VRAM (`10P` rule) = 11.0 GB against
+this machine's 6.14 GB card. Rather than a clean `torch.cuda.OutOfMemoryError`,
+the attempt entered the same Windows CUDA driver shared-memory-fallback
+slowdown this project already documented for Qwen2.5-0.5B's eval (Day 5,
+Section III.F) — VRAM usage climbed to 93.6% of the card (5,746 of 6,141
+MiB) and plateaued there, GPU utilization pinned at 100% but power draw
+only ~26 W (far below genuine compute load), zero training steps
+completed after 17 minutes. This was confirmed directly via
+`nvidia-smi`'s memory/utilization/power trend, not inferred from an
+absence of output, and killed deliberately rather than left to run
+indefinitely. This is the experiment's intended failure result manifesting
+as a silent slowdown rather than a clean exception on this
+Windows/consumer-GPU setup — full detail in Appendix XI.
+
+**QLoRA** (4-bit NF4 frozen base, double quantization, LoRA rank 16 on
+`q_proj`/`k_proj`/`v_proj`/`o_proj`, same 500-step/batch-1/8-grad-accum
+budget as Section A, evaluated on the same fixed 1,500-example subset):
+
+| Metric | Full QAT (attempted) | QLoRA |
+|---|---|---|
+| Outcome | Oversubscription slowdown, 0 steps completed | **Completed successfully** |
+| Peak training VRAM | 5.75 GB (93.6% of card, still climbing) | **1.33 GB (21.6% of card)** |
+| Trainable parameters | 1.1B (100%) | **4.5M (0.41%)** |
+| Perplexity | N/A (did not train) | **9.40** |
+| Training wall-clock (500 steps) | N/A | 1,750s (29.2 min) |
+
+This is a clean, empirically demonstrated crossover: the same model, same
+data, same step budget genuinely does not fit this 6GB card under full
+QAT — not as a theoretical prediction, but as a directly observed failure
+— while QLoRA fits with substantial headroom to spare (1.33 of 6.14 GB
+used), training only 0.41% of the model's parameters. TinyLlama's QLoRA
+perplexity (9.40) is not directly comparable to Section A's control
+perplexities (different model, different pretraining, different
+adaptation method) and is reported as a standalone frontier-method result,
+not a fourth architecture added to the Section A matrix.
 
 ### H. Downstream zero-shot evaluation (LAMBADA/PIQA/HellaSwag)
 
@@ -673,8 +718,16 @@ for an architecture not yet tested.
 - Downstream evaluation (Section C) used 500-example subsamples per task,
   not the full task sets — sufficient to detect the large effects reported
   here, but not fine-grained enough to rule out smaller effects.
-- Section B (memory-frontier/QLoRA) is designed and partially implemented
-  but contains no results as of this draft.
+- The memory-frontier comparison (Section B) uses one model (TinyLlama-1.1B)
+  and reports a single run per method, not a multi-seed comparison — the
+  crossover itself (fits vs. does not fit) is a binary, directly observed
+  fact, but the QLoRA perplexity value (9.40) should not be read with the
+  same seed-variance confidence as Section A's 3-seed numbers.
+- The full-QAT frontier attempt failed via a Windows-specific VRAM-
+  oversubscription slowdown rather than a clean CUDA OOM (Section V.G,
+  Appendix XI) — the qualitative conclusion (does not fit) is unambiguous,
+  but the exact failure *mode* may not reproduce identically on Linux or a
+  different driver/GPU combination.
 
 ---
 
@@ -704,9 +757,11 @@ for an architecture not yet tested.
 - Investigate Qwen2.5-0.5B's new, unexplained `weights_only`
   downstream-accuracy cost (Section V.H) — is it specific to RoPE/GQA
   weight quantization, to Qwen's tokenizer, or to these particular tasks?
-- Complete Section B (memory-frontier) and extend this draft's
-  confound-isolation and variance-reporting discipline to it once it
-  produces data.
+- Extend the memory-frontier comparison (Section B) with multiple seeds
+  for QLoRA and a second frontier-scale model, to give the QLoRA
+  perplexity value the same seed-variance confidence as Section A, and to
+  check whether the full-QAT failure mode (clean OOM vs. oversubscription
+  slowdown) is specific to this Windows/driver setup or general.
 
 ---
 
@@ -735,12 +790,15 @@ architecture families. Downstream evaluation also surfaced a genuinely new
 and unresolved wrinkle: on Qwen2.5-0.5B, even weight-only QAT costs real
 downstream accuracy despite modest perplexity impact, complicating the
 "weight quantization is nearly free" reading OPT and Pythia alone would
-support. Every experiment in this draft ran on a single consumer laptop
-GPU under a 6GB budget; this shaped a breadth-over-depth study design
-deliberately, and is reported as a methodological detail rather than the
-paper's selling point. Section B, the memory-frontier QAT-vs-QLoRA
-comparison, remains unstarted as of this draft and is named as such
-rather than implied complete.
+support. The memory-frontier comparison demonstrates the same 6GB budget's
+practical limit directly: a 1.1B-parameter model's full QAT attempt fails
+(via a driver-level slowdown rather than a clean exception, but fails
+regardless), while QLoRA fits comfortably, training under half a percent
+of the model's parameters — an empirically observed, not merely predicted,
+crossover point. Every experiment in this draft ran on a single consumer
+laptop GPU under this same 6GB budget; this shaped a breadth-over-depth
+study design deliberately, and is reported as a methodological detail
+rather than the paper's selling point.
 
 ---
 
@@ -793,6 +851,21 @@ glacial progress indistinguishable from a stuck process without directly
 measuring VRAM. Diagnosis method: direct VRAM measurement, not inference
 from symptoms. Fix: `EVAL_BATCH_SIZE=1`, cutting eval peak VRAM to 1.27 GB
 (9x reduction) with zero effect on the perplexity result.
+
+**The same failure mode recurred on the Section B frontier attempt (Day
+12).** Attempting full QAT on TinyLlama-1.1B (predicted 11.0 GB fixed
+VRAM against the 6.14 GB card) produced no `torch.cuda.OutOfMemoryError`
+at all: VRAM climbed to 5,746 of 6,141 MiB (93.6%) and plateaued there,
+GPU utilization pinned at 100% with power draw only ~26 W — the same
+signature (high utilization, low power, no progress) as the original
+incident, confirmed the same way (direct `nvidia-smi` measurement over
+time, not inferred from silence: memory was checked at multiple points
+and shown to have stopped climbing, ruling out "about to finish loading").
+Killed manually after 17 minutes with zero training steps completed. This
+recurrence across two different models (a ~0.5B and a 1.1B parameter
+model) suggests the pattern is a general property of this
+Windows/consumer-GPU/driver combination when VRAM demand exceeds the
+card, not a one-off tied to Qwen's vocabulary size specifically.
 
 **Known bugs found and fixed during this project** (full detail in
 `docs/reports/`, one entry per session): a per-layer quantization-error

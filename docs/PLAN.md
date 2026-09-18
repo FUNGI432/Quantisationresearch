@@ -4,7 +4,27 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 11)
+## Status (updated after Day 12/13)
+
+**Day 12/13: Sections B, C, and D are all complete, in that order, per
+explicit direction.** Section D: backfilled per-example NLL for all 24
+OPT/Pythia runs, ran the full 24-test Wilcoxon battery with a
+Benjamini-Hochberg correction (21/24 significant, none overturned by the
+correction), and found + fixed a real FP16-checkpoint-rounding bug along
+the way (see `docs/reports/2026-09-18_session-12.md`). Section C: ran the
+full 36-run downstream zero-shot matrix (LAMBADA/PIQA/HellaSwag) --
+confirmed Section A's headline finding independently (Pythia's
+activation-QAT damage nearly halves LAMBADA accuracy) and surfaced a new,
+unexplained finding (Qwen's `weights_only` also costs real downstream
+accuracy, unlike OPT/Pythia). Section B: TinyLlama-1.1B's full-QAT attempt
+hit the same Windows VRAM-oversubscription slowdown already documented for
+Qwen (not a clean OOM, but a real, directly-confirmed failure), now shown
+to recur on a second, larger model; QLoRA completed cleanly at 1.33GB
+peak VRAM (21.6% of the 6GB card), training 0.41% of parameters,
+PPL=9.40. All three sections' results are written into
+`docs/PAPER_DRAFT.md`. Per standing project practice, next steps (the two
+open research questions, Section E/F polish, or something else) are to be
+decided as their own conversation.
 
 **Day 11: Section A is complete -- 36/36 QAT training runs across all 3
 models.** `both`/seed=2024 resumed cleanly from the step-250 checkpoint
@@ -52,7 +72,7 @@ initially-reported one.
 | Section | Status |
 |---|---|
 | A: Selective-QAT matrix | ✅ **Complete -- 3/3 models, 36/36 QAT training runs.** OPT-350M 12/12, Pythia-410M 12/12, Qwen2.5-0.5B 12/12 (`none` 3/3, `weights_only` 3/3, `activations_only` 3/3 redone with gradient clipping, `both` 3/3). First full paper draft written Day 11 (`docs/PAPER_DRAFT.md`). |
-| B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
+| B: Memory-frontier (QLoRA) | ✅ **Complete (Day 12/13).** TinyLlama-1.1B: full QAT does not fit the 6GB card (a Windows VRAM-oversubscription slowdown, not a clean OOM -- same failure mode as the Day 5 Qwen incident, now confirmed recurring on a second, larger model); QLoRA completes cleanly at 1.33GB peak VRAM (21.6% of card), training 0.41% of params, PPL=9.40 on the standard 1500-example eval subset. |
 | C: Downstream evaluation | ✅ **Complete (Day 12).** 36/36 runs (3 models x 4 configs x 3 seeds, LAMBADA/PIQA/HellaSwag, 500-example subsample). Confirms Section A: Pythia's activation-QAT damage nearly halves LAMBADA accuracy (-55.6%), OPT's is noise-level (<=2%). New finding: Qwen's `weights_only` also costs real downstream accuracy (-32.2% LAMBADA) despite modest perplexity impact -- unlike OPT/Pythia, not yet understood. |
 | D: Statistics | ✅ **Complete (Day 12).** Backfilled per-example NLL for all 24 OPT/Pythia runs; ran the full 24-test Wilcoxon battery with Benjamini-Hochberg correction (`stats.py --full-report`) -- 21/24 significant after correction, zero flipped by the correction. Only `weights_only` vs. control is ever non-significant (3 of 8 testable seeds), directly confirming the regularizer-effect-fragility finding statistically. Backfill's sanity check also surfaced and fixed a real FP16-checkpoint-rounding bug (see `docs/PAPER_DRAFT.md` Appendix XI). |
 | E: Mathematical framing | 🔄 In progress -- now backed by real 3-model data, and a real finding that the params-only memory model breaks down for large-vocabulary architectures (Day 5, `docs/MATH.md` §1-2) |

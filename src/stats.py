@@ -19,11 +19,16 @@ Two significance tests, in order of preference:
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 from scipy import stats as sstats
 
 from config import MATRIX_MODELS, RESULTS_DIR
+
+# See train_qat.py's docstring: without this, progress prints don't appear in
+# real time when stdout isn't a TTY (e.g. piped through `tail`).
+sys.stdout.reconfigure(line_buffering=True)
 
 
 def load(model_key: str) -> dict:

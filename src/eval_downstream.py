@@ -8,6 +8,7 @@ runtime bounded on laptop hardware -- see --limit.
 import argparse
 import json
 import os
+import sys
 
 import torch
 from lm_eval import simple_evaluate
@@ -18,6 +19,12 @@ from common import append_result, run_metadata
 from fakequant import STRATEGIES, inject_fake_quant
 from prepare_data import resolve_hf_id
 from train_qat import checkpoint_path
+
+# See train_qat.py's docstring: without this, progress prints don't appear in
+# real time when stdout isn't a TTY (e.g. piped through `tail`), making a
+# genuinely-running process look hung -- exactly what happened debugging this
+# script's own smoke test on Day 12 before this fix was propagated here.
+sys.stdout.reconfigure(line_buffering=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_TASKS = ["lambada_openai", "piqa", "hellaswag"]

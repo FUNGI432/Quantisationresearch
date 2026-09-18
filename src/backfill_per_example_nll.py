@@ -17,12 +17,18 @@ actually match what produced that PPL (e.g. wrong strategy/seed pairing).
 import argparse
 import json
 import os
+import sys
 
 import torch
 
 from common import evaluate_perplexity, get_dataloader, load_tokenized_dataset, save_per_example_nll
 from config import EVAL_BATCH_SIZE, EVAL_SUBSET_SIZE, RESULTS_DIR
 from eval_downstream import load_trained_checkpoint
+
+# See train_qat.py's docstring: without this, progress prints don't appear in
+# real time when stdout isn't a TTY (e.g. piped through `tail`), making a
+# genuinely-running process look hung.
+sys.stdout.reconfigure(line_buffering=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PPL_MISMATCH_TOLERANCE = 0.01  # relative

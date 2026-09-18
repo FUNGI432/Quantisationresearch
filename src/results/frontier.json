@@ -1,0 +1,30 @@
+{
+  "full_qat_frontier_attempt": [
+    {
+      "predicted_fixed_vram_gb": 11.0,
+      "vram_limit_gb": 6.14,
+      "outcome": "oversubscription_slowdown",
+      "peak_observed_vram_mib": 5746,
+      "peak_observed_vram_pct_of_card": 93.6,
+      "gpu_utilization_pct_observed": 100,
+      "power_draw_w_observed": 25.95,
+      "elapsed_before_kill_s": 1020,
+      "steps_completed": 0,
+      "note": "No clean torch.cuda.OutOfMemoryError was raised. Instead, VRAM usage climbed to ~94% of the 6.14GB card and plateaued there (5740->5746 MiB over ~4 additional minutes of observation), with GPU utilization pinned at 100% but power draw only ~26W -- far below genuine compute load. This is the same Windows CUDA driver shared-memory-fallback pattern already documented for Qwen2.5-0.5B eval on Day 5 (docs/reports/2026-08-30_session-5.md; docs/MATH.md sec 2): high utilization from the driver repeatedly retrying/paging, not real forward progress. Killed manually after 17 minutes with zero training steps completed (the probe has no per-step logging, so this was confirmed via nvidia-smi memory/utilization/power trend, not inferred from silence). This is treated as the experiments intended failure result (the docstring: attempt_full_qat is expected to OOM or come very close -- that failure IS the result), just manifesting as an indefinite silent slowdown rather than a clean exception on this Windows/consumer-GPU setup, consistent with and extending the projects existing VRAM-oversubscription finding to the training side of a genuinely oversized (1.1B param) model."
+    }
+  ],
+  "qlora": [
+    {
+      "perplexity": 9.396421760377013,
+      "peak_vram_mib": 1275.37939453125,
+      "eval_time_s": 191.98076963424683,
+      "n_tokens": 236120,
+      "trainable_params": 4505600,
+      "total_params": 1104553984,
+      "train_time_s": 1750.376606464386,
+      "peak_train_vram_mib": 1359.86865234375,
+      "lora_r": 16,
+      "steps": 500
+    }
+  ]
+}

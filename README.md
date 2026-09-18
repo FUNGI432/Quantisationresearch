@@ -85,14 +85,22 @@ redo (Day 9), and held for the remaining `both` runs too. A first full
 paper draft assembling all of this data (`docs/PAPER_DRAFT.md`) was
 written Day 11 — see Known Issues for what it surfaced.
 
-**Honest framing (added Day 4, `docs/reports/2026-08-29_session-4.md`):**
-Section A (the matrix) answers only 1 of the 6 original ACL reviewer
-critiques — architectural diversity. The other 5 (seed variance now
-partially addressed; QLoRA/SmoothQuant/AWQ comparisons partially addressed
-via SmoothQuant + INT8; downstream evaluation, real significance testing,
-and societal impact) are either partial or **not started at all**. Finishing
-Qwen's matrix is not the same as finishing this project's response to the
-reviewers — see `docs/JOURNAL.md` for the fuller reflection on this.
+**Day 12/13 update: Sections B, C, and D are now also complete**, in that
+order per explicit direction. Section D: real per-seed Wilcoxon
+significance tests with a Benjamini-Hochberg correction (21/24
+significant, `results/significance_report.json`). Section C: 36-run
+downstream zero-shot matrix (LAMBADA/PIQA/HellaSwag), confirming Section
+A's headline finding independently and surfacing a new one on Qwen (see
+Known Issues). Section B: TinyLlama-1.1B's full-QAT attempt hits the same
+Windows VRAM-oversubscription slowdown already found for Qwen (now
+confirmed recurring on a second, larger model); QLoRA completes cleanly
+at 1.33GB peak VRAM, PPL=9.40. Of the 6 original ACL reviewer critiques
+(`docs/reports/2026-08-29_session-4.md`), 3 are now fully addressed
+(architectural diversity, reproducibility, societal impact) and 2 more
+substantially so (seed variance + significance testing; PTQ/QLoRA
+comparison), with only the SmoothQuant failure mode still genuinely
+unresolved — see `docs/PAPER_DRAFT.md` for the full picture and
+`docs/JOURNAL.md` for the fuller reflection on what's actually left.
 
 | Model | PTQ baselines | QAT matrix (4 configs x 3 seeds = 12 runs) |
 |---|---|---|
@@ -369,7 +377,17 @@ also settle the weights-only-vs-control question properly — see
   script. Training now also prints every single step (was every 50) and
   eval prints every 10 batches with a running perplexity estimate — GPU
   utilization is no longer the only available signal that a run is
-  progressing.
+  progressing. **Day 12/13 update**: this fix had only ever been applied to
+  `train_qat.py` — every other entry-point script written since (`stats.py`,
+  `eval_downstream.py`, `qlora_frontier.py`, `prepare_data.py`,
+  `backfill_per_example_nll.py`) was still silently full-buffering,
+  discovered the hard way when a `--limit 5` smoke test of
+  `eval_downstream.py`, piped through `tail`, looked completely hung (0
+  bytes output, near-zero CPU) for 3+ minutes and was nearly killed as a
+  false alarm before being confirmed (via `nvidia-smi`, then an unpiped
+  unbuffered rerun) to have been working the whole time. Propagated the fix
+  to all of them (`run_matrix.py`/`run_downstream_matrix.py` inherit it
+  transitively via their imports).
 - **~~The Wilcoxon signed-rank test described in `docs/PLAN.md` Section D
   isn't implemented yet~~ — implemented Day 4, not yet exercised on real
   data.** `common.evaluate_perplexity(return_per_example=True)` now logs
@@ -461,18 +479,25 @@ Verify CUDA:
 
 ## Next steps
 
-1. Section A (the 3-model QAT matrix, 36/36 runs) is complete and a first
-   full paper draft exists (`docs/PAPER_DRAFT.md`). Decide next steps
-   deliberately as their own conversation — Section B (QLoRA frontier),
-   Section C (downstream eval), Section D (run the significance tests),
-   the Section VIII ablation, or SmoothQuant root-causing — rather than
-   rolling straight into any one of them by default. See `docs/JOURNAL.md`.
-2. Debug the SmoothQuant anomaly — now confirmed on 2 of 3 models, not
-   Pythia-specific.
-3. Run the memory-frontier (QLoRA) experiment on the 1.1B model.
-4. Run downstream zero-shot evaluation (`lm-eval-harness`) on all trained
-   checkpoints.
-5. Run the formal cross-model statistics and significance tests (needs
-   per-example NLL logging added first for the real Wilcoxon test).
-6. Rewrite the paper with the honest multi-seed findings, add the missing
-   societal-impact section, and settle on a target venue.
+**Sections A, B, C, and D are all complete** (36/36 QAT training runs;
+memory-frontier QAT-vs-QLoRA comparison; 36/36 downstream zero-shot runs;
+the full significance-testing battery with a multiple-comparisons
+correction), all written into `docs/PAPER_DRAFT.md`. Per standing project
+practice, what comes next is being decided as its own conversation rather
+than assumed. Live candidates:
+
+1. Debug the SmoothQuant anomaly — confirmed on 2 of 3 models, still not
+   root-caused.
+2. Investigate the two open research questions this project's own analysis
+   surfaced: Qwen's `weights_only` seed=1337 perplexity outlier (unresolved
+   since Day 7), and the new, non-monotonic relationship between per-layer
+   weight/activation error ratio and downstream damage.
+3. Investigate the new Qwen `weights_only` downstream-accuracy finding from
+   Section C (real cost there, unlike OPT/Pythia, despite modest
+   perplexity impact) — not yet understood.
+4. The Section VIII controlled ablation (a matched model pair isolating one
+   architectural axis) — the highest-leverage way to convert the headline
+   finding from an existence claim into a mechanistic one, but the biggest
+   lift (requires training/sourcing a new model pair).
+5. Polish the paper draft itself — verify references, tighten prose,
+   settle on a target venue.

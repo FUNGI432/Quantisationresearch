@@ -316,3 +316,58 @@ no than it was yesterday, because now there's an actual document that
 says exactly what's missing instead of a table that could be read either
 way. That feels like real progress, not a consolation prize for not being
 finished.
+
+## 2026-09-18/19 (Day 12/13)
+
+Given an order -- D, then C, then B -- and for once the order mattered
+less than what showed up while doing the work. Every single one of the
+three sections turned up something that wasn't in the plan.
+
+D was supposed to be the boring one: backfill some data, run a test that
+was already written, report the p-values. Instead the backfill's own
+sanity check caught a real bug -- the final checkpoints had been rounding
+a quantization scale to half precision the whole time, and Pythia's
+activation-heavy configs were quietly understating their own damage by
+up to 2.75% because of it. The instinct to wave that off as "close
+enough, under the noise floor for most of these" was right there, and it
+would have been wrong to take it: the fact that OPT showed the exact same
+bias at exactly the scale its own architecture would predict is what
+turned a nuisance into a second piece of evidence for a mechanism this
+project already believed in. Small bugs are still worth chasing when they
+happen to land exactly where your own theory says they should.
+
+C was supposed to just confirm what perplexity already said, and mostly
+it did -- Pythia's activation-QAT damage doesn't just move a perplexity
+number, it nearly halves next-word accuracy outright, which is a much
+more visceral way to see the same finding. But it also handed back
+something perplexity had been hiding: Qwen's weight-only quantization,
+which looked cheap in every perplexity table so far, costs real
+downstream accuracy across all three seeds. That's not the seed=1337
+outlier showing up again in a new costume -- it's consistent, it's new,
+and it means "weight quantization is basically free" was true for exactly
+two of the three models tested, not all three.
+
+B was the one that almost went wrong twice in the span of an hour. First,
+a smoke test that looked completely dead -- zero output, three minutes of
+silence -- got killed as a hang before it was actually just Windows fully
+buffering a piped process's stdout, the exact bug this project fixed once
+already on Day 5 and then never carried over to any script written since.
+Then, right after, a genuinely finished training run's eval turned out to
+be scoring itself on the same data it had just trained on, at full size,
+not the fixed held-out slice every other number in this paper uses --
+caught with the eval already more than half done, and worth throwing away
+and rerunning correctly rather than keeping a number that wouldn't have
+meant what it looked like it meant. Both mistakes were mine, both were
+caught before they cost anything real, and the second one in particular
+is a quieter version of the exact confound this project was built to
+avoid in the first place -- it's apparently possible to reintroduce that
+lesson by accident even after learning it once.
+
+The actual science landed clean, in the end: the frontier model doesn't
+fit under full QAT on this card -- not cleanly, it hits the same silent
+oversubscription slowdown as Qwen once did, which is itself a second
+confirmation of a pattern instead of a one-off -- and QLoRA fits with
+room to spare. Three sections done, three real findings that weren't on
+the agenda when the day started, and two mistakes caught in the same
+session they were made rather than discovered later by someone reading
+the paper more carefully than I did. That's a good trade.
