@@ -273,3 +273,46 @@ So the matrix ends today at 11 of 12, one clean resume away from done.
 That's a good, clear place to stop -- closer to finished than confused,
 and with the next action (resume, finish, then actually sit down and
 decide what comes after Section A) obvious rather than improvised.
+
+## 2026-09-18
+
+Twelve of twelve. The resume from step 250 picked up exactly where the
+checkpoint said it would, the training half was noticeably faster than the
+day before for reasons that turned out to be worth actually chasing down
+(a system reboot, and possibly the accumulated weight of over a dozen
+background monitoring loops that never got cleanly torn down between
+sessions) rather than shrugged off as "computers are like that
+sometimes" -- and the final eval landed at PPL=33.55, in the same healthy
+range as its two sibling seeds. Section A, the thing this whole
+multi-week matrix has been building toward, is done.
+
+Then came the part that felt different from every other day of this
+project: turning all of it into something that reads like a paper instead
+of a status table. Sitting down to actually populate the outline with the
+real numbers surfaced two things that had been sitting quietly in the
+data the whole time without anyone noticing, because nobody had put every
+model's numbers next to each other in the same table before. Qwen's
+weight/activation error ratio is the *lowest* of the three models, not the
+highest -- which is backwards from what the fused-QKV story would predict
+if it were the whole explanation, since Qwen doesn't even have fused QKV.
+And the seed=1337 weights-only outlier that got flagged back on Day 7 and
+then quietly not revisited is still just sitting there, unexplained, now
+load-bearing enough in the mean that it can't be glossed over in a paper
+the way it could be glossed over in a status update.
+
+Neither of those is a comfortable thing to find while assembling a draft
+that's supposed to be making the project's case. The easy version of this
+moment would have been to average past both of them, report the clean
+headline number, and let the draft look more finished than it is. That's
+exactly the instinct this project has been trying to build a habit of
+resisting since the very first session's "we didn't crash, so it's
+probably fine" -- and it held here too. Both wrinkles are in the draft,
+named as open questions, not smoothed into the prose.
+
+It's a strange kind of milestone: the data collection phase that ate most
+of this project's calendar time is actually finished, and the honest
+answer to "is the paper done" is still no, more clearly and specifically
+no than it was yesterday, because now there's an actual document that
+says exactly what's missing instead of a table that could be read either
+way. That feels like real progress, not a consolation prize for not being
+finished.

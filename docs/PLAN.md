@@ -4,7 +4,27 @@ Origin: ACL Submission #173 reviewer feedback. Goal: turn the single-model OPT-3
 study into a multi-model, statistically rigorous, publication-grade paper suitable
 for a journal (venue not yet decided).
 
-## Status (updated after Day 10)
+## Status (updated after Day 11)
+
+**Day 11: Section A is complete -- 36/36 QAT training runs across all 3
+models.** `both`/seed=2024 resumed cleanly from the step-250 checkpoint
+(exact match, verified), finished training at step 500/500 (loss normal
+throughout, clipping engaging consistently, no spikes/NaN) and eval
+(PPL=33.55, peak VRAM 4701.9 MiB, 635.2s). `SECTION A COMPLETE` printed;
+matrix runner exited code 0. A first full paper draft was written this
+session (`docs/PAPER_DRAFT.md`), assembling all of Section A's real data
+into the structure of `docs/PAPER_OUTLINE.md` -- this surfaced two
+findings not previously written up: (1) the weight/activation
+relative-error ratio does **not** predict downstream damage monotonically
+across all 3 models (Qwen has the *lowest* ratio, 2.33x, but the
+*second-highest* PPL damage, complicating the fused-QKV mechanism
+hypothesis), and (2) Qwen's control and weights-only results carry
+unusually high seed variance (weights-only std=6.04, driven almost
+entirely by the still-unexplained seed=1337 outlier flagged Day 7) --
+both are now documented as open items rather than smoothed over in the
+draft. Per standing project direction, next steps (Section B/C/D vs. the
+Section VIII ablation vs. something else) are to be decided as their own
+conversation now that this draft exists to react to, not assumed.
 
 **Day 10:** `both`/seed=42 and seed=1337 completed cleanly (PPL 31.81 /
 29.58), clipping engaged throughout, no spikes -- `activations_only`'s Day
@@ -31,7 +51,7 @@ initially-reported one.
 
 | Section | Status |
 |---|---|
-| A: Selective-QAT matrix | 🔄 2 of 3 models complete (OPT-350M ✅, Pythia-410M ✅, Qwen2.5-0.5B baselines done / QAT matrix at **11/12 confirmed-good, 1 in progress** -- `none` 3/3, `weights_only` 3/3, `activations_only` 3/3 (redone with gradient clipping); `both` 2/3, seed=2024 mid-training (step 250/500, stopped cleanly Day 10)) -- 35/36 training runs done or in progress |
+| A: Selective-QAT matrix | ✅ **Complete -- 3/3 models, 36/36 QAT training runs.** OPT-350M 12/12, Pythia-410M 12/12, Qwen2.5-0.5B 12/12 (`none` 3/3, `weights_only` 3/3, `activations_only` 3/3 redone with gradient clipping, `both` 3/3). First full paper draft written Day 11 (`docs/PAPER_DRAFT.md`). |
 | B: Memory-frontier (QLoRA) | **Not started at all** -- and its planning assumptions need revisiting per the Day 5 vocabulary-size finding (see below) |
 | C: Downstream evaluation | **Not started at all** (pipeline built, only ever smoke-tested) -- flagged Day 4 |
 | D: Statistics | 🔄 Real Wilcoxon signed-rank test implemented (Day 4), not yet exercised on real data -- needs a GPU-idle window to backfill the 24 completed OPT/Pythia runs plus Qwen's seed=42 control (`backfill_per_example_nll.py`, dry-run verified) before a paired test can run on Qwen's control seeds as a full set |
