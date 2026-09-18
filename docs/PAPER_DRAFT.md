@@ -14,13 +14,13 @@ directly from `results/*.json` in this repository unless stated otherwise
 labeled as a fit or estimate.
 
 **What is done, going into this draft:** Section A (36/36 QAT training runs
-across 3 models, all PTQ baselines, all controls) and Section D (the full
-Wilcoxon significance battery with a Benjamini-Hochberg multiple-comparisons
-correction, run on real data as of Day 12). **What is not:** Section B
-(memory-frontier/QLoRA) and Section C (downstream lm-eval-harness). This
-draft exists to make that boundary concrete and to surface what the
-completed data actually says, so the next-steps conversation has a real
-document to react to rather than a status table.
+across 3 models), Section D (the full Wilcoxon significance battery with a
+Benjamini-Hochberg correction), and Section C (36/36 downstream zero-shot
+eval runs — LAMBADA/PIQA/HellaSwag, all confirmed complete as of Day 12).
+**What is not:** Section B (memory-frontier/QLoRA). This draft exists to
+make that boundary concrete and to surface what the completed data
+actually says, so the next-steps conversation has a real document to
+react to rather than a status table.
 
 ---
 
@@ -42,7 +42,15 @@ far larger than seed-to-seed noise for OPT and Pythia, and — now backed by
 a full battery of 24 paired Wilcoxon signed-rank tests on held-out
 per-example NLL with a Benjamini-Hochberg multiple-comparisons correction
 — is statistically significant in all 18 activation-involving comparisons
-tested (q<0.05, most at p<10⁻⁶). Separately, we
+tested (q<0.05, most at p<10⁻⁶). Downstream zero-shot evaluation
+(LAMBADA/PIQA/HellaSwag) independently confirms this on a completely
+different metric: Pythia-410M's activation-QAT damage nearly halves
+LAMBADA next-word accuracy (43.1%→19.1%) while OPT-350M's equivalent
+change is noise-level (≤2%). A further, unanticipated finding on
+Qwen2.5-0.5B: unlike on OPT/Pythia, *weight-only* QAT also costs Qwen
+substantial downstream accuracy (−32.2% relative on LAMBADA) despite only
+modest perplexity impact — complicating the "weight quantization is
+nearly free" reading the other two models would otherwise support. Separately, we
 show that a claimed "QAT-as-regularizer" effect (weight-only QAT beating an
 unquantized control), visible in this project's original single-seed
 predecessor study, does not survive proper 3-seed evaluation on OPT-350M
@@ -56,10 +64,13 @@ fails (PPL 256.5 and 88.2 against expected ~29-30 and ~21-22) on 2 of 3
 tested architectures, both non-pre-norm relative to the one architecture
 where it works correctly — root cause not yet fully isolated. All
 experiments ran on a single consumer laptop GPU; this shaped the study's
-breadth-over-depth design rather than being a headline result. Sections
-covering a memory-frontier QAT-vs-QLoRA comparison and downstream zero-shot
-task evaluation are designed and implemented but **not yet run** — this is
-stated plainly rather than described as complete.
+breadth-over-depth design rather than being a headline result. Downstream
+zero-shot evaluation (LAMBADA/PIQA/HellaSwag) independently confirms the
+headline finding and surfaces a new wrinkle on Qwen2.5-0.5B (weight-only
+QAT costs real downstream accuracy there despite modest perplexity
+impact). The memory-frontier QAT-vs-QLoRA comparison (Section B) is
+designed and implemented but **not yet run** — this is stated plainly
+rather than described as complete.
 
 ---
 
@@ -91,8 +102,12 @@ not conflated:
    architecture families at matched, fixed scale (331-494M parameters) —
    from +3.9% to +106.2% relative perplexity increase over a matched
    control — reported in both relative and absolute (bits/token) terms,
-   with the absolute-terms comparison telling the same story as the
-   relative one (Section V.E).
+   confirmed by a real paired significance test with a multiple-
+   comparisons correction (Section V.D), and independently corroborated
+   on a downstream zero-shot task battery where the same architecture that
+   showed severe perplexity damage also loses nearly half its next-word
+   prediction accuracy while the mild-damage architecture shows no
+   measurable downstream cost (Section V.H).
 2. A methodological demonstration that a claimed "QAT-as-regularizer"
    effect, visible under single-seed evaluation in this project's own
    predecessor study, does not survive proper multi-seed, controlled
@@ -514,10 +529,55 @@ budget) is now known to be invalid for large-vocabulary architectures
 explicit acknowledgment that the frontier model choice is not yet
 justified by a validated formula.
 
-### H. Downstream zero-shot evaluation (LAMBADA/PIQA/HellaSwag) — **[NOT YET RUN]**
+### H. Downstream zero-shot evaluation (LAMBADA/PIQA/HellaSwag)
 
-Pipeline built, smoke-tested only (per `docs/PLAN.md` Day 4 note). No
-results exist.
+Zero-shot, 500-example subsample per task, all 3 seeds, all 3 models, all
+4 configurations (36 runs total). Metric: `acc` for LAMBADA (next-word
+prediction), `acc_norm` for PIQA/HellaSwag (length-normalized multiple
+choice). Percent change vs. each model's own control, mean across 3 seeds:
+
+| Model | Strategy | LAMBADA (Δacc) | PIQA (Δacc_norm) | HellaSwag (Δacc_norm) |
+|---|---|---|---|---|
+| OPT-350M | weights-only | +1.9% | +0.1% | +0.3% |
+| OPT-350M | activations-only | −1.2% | +0.6% | +0.8% |
+| OPT-350M | both | −0.5% | +0.0% | +1.3% |
+| Pythia-410M | weights-only | +2.9% | −0.3% | −1.6% |
+| Pythia-410M | activations-only | **−55.6%** | −14.2% | −10.5% |
+| Pythia-410M | both | **−54.9%** | −11.8% | −11.2% |
+| Qwen2.5-0.5B | weights-only | **−32.2%** | −9.6% | −8.6% |
+| Qwen2.5-0.5B | activations-only | −38.5% | −10.4% | −17.7% |
+| Qwen2.5-0.5B | both | −39.3% | −9.6% | −16.8% |
+
+Two findings, one confirmatory and one new:
+
+**Confirmatory**: Pythia-410M's activation-QAT damage, already the most
+severe perplexity result in this study (+106.2%), is not a perplexity
+artifact — it devastates actual downstream task performance on a
+completely different evaluation axis, nearly halving LAMBADA's next-word
+accuracy (43.1% → 19.1-19.5%). OPT-350M's near-zero perplexity cost
+likewise shows up as near-zero downstream cost (all changes within ±2%,
+indistinguishable from noise at this sample size). This is exactly the
+independent corroboration Section C was designed to provide, and it lands
+cleanly in both directions.
+
+**New, not visible in perplexity alone**: on Qwen2.5-0.5B, `weights-only`
+QAT — the strategy that was cheap-to-free on both OPT and Pythia, in both
+perplexity and downstream terms — costs **−32.2% relative LAMBADA
+accuracy and −8.6 to −9.6% on PIQA/HellaSwag**, comparable in magnitude to
+Qwen's own `activations_only`/`both` results, and nowhere close to
+OPT/Pythia's weights-only downstream cost (≤3% either direction). This
+complicates the "weight quantization is nearly free" reading that OPT and
+Pythia alone would support: for Qwen specifically, *all three* QAT
+strategies meaningfully hurt downstream zero-shot accuracy, not just the
+activation-involving ones. This is independent of, and arguably more
+striking than, the already-flagged `weights_only` perplexity seed-variance
+issue (Section V.C) — LAMBADA/PIQA/HellaSwag results are consistent across
+all 3 seeds (no single-seed outlier driving this), so it cannot be
+explained away as the same seed=1337 anomaly. Not yet understood: whether
+this is downstream-task-format sensitivity specific to Qwen's tokenizer/
+vocabulary, a genuine property of RoPE+GQA weight quantization, or
+something else — flagged as a new open question (Section VIII), not
+resolved here.
 
 ---
 
@@ -605,10 +665,16 @@ for an architecture not yet tested.
   yet investigated** (Section V.C) — any single-seed reading of Qwen's
   weights-only result specifically should be treated with more caution
   than the equivalent OPT/Pythia numbers.
-- Section B (memory-frontier/QLoRA), Section C (downstream lm-eval-harness
-  tasks), and Section D (formal significance testing) are designed and,
-  for B and D, partially implemented, but contain no results as of this
-  draft.
+- **Qwen2.5-0.5B's `weights_only` downstream-accuracy cost (Section V.H)
+  is new and not yet understood** — whether it reflects a genuine RoPE/GQA
+  weight-quantization sensitivity, a tokenizer/vocabulary-specific
+  interaction with these particular tasks, or something else is not
+  established here.
+- Downstream evaluation (Section C) used 500-example subsamples per task,
+  not the full task sets — sufficient to detect the large effects reported
+  here, but not fine-grained enough to rule out smaller effects.
+- Section B (memory-frontier/QLoRA) is designed and partially implemented
+  but contains no results as of this draft.
 
 ---
 
@@ -635,38 +701,46 @@ for an architecture not yet tested.
   patch the equation.
 - Root-cause the SmoothQuant failure recurrence beyond the two
   architectures where it is currently only documented, not explained.
-- Run Section D's implemented significance-testing pipeline on the now-
-  complete Section A dataset (backfill older per-example NLL, apply a
-  multiple-comparisons correction).
-- Complete Section B (memory-frontier) and Section C (downstream
-  evaluation), and extend this draft's confound-isolation and
-  variance-reporting discipline to both once they produce data.
+- Investigate Qwen2.5-0.5B's new, unexplained `weights_only`
+  downstream-accuracy cost (Section V.H) — is it specific to RoPE/GQA
+  weight quantization, to Qwen's tokenizer, or to these particular tasks?
+- Complete Section B (memory-frontier) and extend this draft's
+  confound-isolation and variance-reporting discipline to it once it
+  produces data.
 
 ---
 
 ## IX. Conclusion
 
 Under matched, rigorous methodology — a proper isolated control, three
-seeds per configuration, PTQ baselines for context, and both relative and
-absolute effect-size reporting — the same selective-QAT treatment
+seeds per configuration, PTQ baselines for context, both relative and
+absolute effect-size reporting, real paired significance testing with a
+multiple-comparisons correction, and independent confirmation on a
+downstream zero-shot task battery — the same selective-QAT treatment
 (activation quantization) causes wildly different damage across three
-small language models at fixed scale: from a mild +3.9% perplexity
-increase to a severe +106.2% one. This variation is an existence claim,
-not a mechanistic one: this study cannot yet say which of the several
-architectural differences between these models is responsible. A
-methodological caution accompanies the headline result: a real regularizer
-effect reported under single-seed evaluation in this project's own earlier
-work did not survive proper controlled re-evaluation. A memory-scaling
+small language models at fixed scale: from a mild, statistically
+indistinguishable-from-noise +3.9% perplexity increase to a severe,
+highly significant +106.2% one that nearly halves downstream next-word
+accuracy. This variation is an existence claim, not a mechanistic one:
+this study cannot yet say which of the several architectural differences
+between these models is responsible. A methodological caution accompanies
+the headline result: a real regularizer effect reported under single-seed
+evaluation in this project's own earlier work did not survive proper
+controlled re-evaluation, and this is now backed by real significance
+tests rather than an eyeballed mean comparison. A memory-scaling
 relationship fit on two architectures required revision, not just
 extension, once tested against a third with a substantially larger
 vocabulary — parameter count alone is an unreliable memory proxy across
-architecture families. Every experiment in this draft ran on a single
-consumer laptop GPU under a 6GB budget; this shaped a breadth-over-depth
-study design deliberately, and is reported as a methodological detail
-rather than the paper's selling point. Sections covering a memory-frontier
-QAT-vs-QLoRA comparison and downstream zero-shot evaluation remain
-unstarted as of this draft and are named as such rather than implied
-complete.
+architecture families. Downstream evaluation also surfaced a genuinely new
+and unresolved wrinkle: on Qwen2.5-0.5B, even weight-only QAT costs real
+downstream accuracy despite modest perplexity impact, complicating the
+"weight quantization is nearly free" reading OPT and Pythia alone would
+support. Every experiment in this draft ran on a single consumer laptop
+GPU under a 6GB budget; this shaped a breadth-over-depth study design
+deliberately, and is reported as a methodological detail rather than the
+paper's selling point. Section B, the memory-frontier QAT-vs-QLoRA
+comparison, remains unstarted as of this draft and is named as such
+rather than implied complete.
 
 ---
 

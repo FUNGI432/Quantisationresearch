@@ -369,6 +369,551 @@
       "gradient_checkpointing": true,
       "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
       "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 1337,
+      "strategy": "none",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 16.610325006585576,
+          "perplexity_stderr,none": 1.8573281364881153,
+          "acc,none": 0.464,
+          "acc_stderr,none": 0.022324981738385333
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.678,
+          "acc_stderr,none": 0.02091666833001987,
+          "acc_norm,none": 0.64,
+          "acc_norm_stderr,none": 0.02148775108972057
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.372,
+          "acc_stderr,none": 0.021637197985722334,
+          "acc_norm,none": 0.436,
+          "acc_norm_stderr,none": 0.022198954641476896
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 2024,
+      "strategy": "none",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 19.328348807730972,
+          "perplexity_stderr,none": 2.1197111675936244,
+          "acc,none": 0.418,
+          "acc_stderr,none": 0.022080014812228193
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.68,
+          "acc_stderr,none": 0.02088234048876172,
+          "acc_norm,none": 0.65,
+          "acc_norm_stderr,none": 0.021352091786223066
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.382,
+          "acc_stderr,none": 0.02175082059125093,
+          "acc_norm,none": 0.42,
+          "acc_norm_stderr,none": 0.02209471322976179
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "downstream_weights_only": [
+    {
+      "seed": 42,
+      "strategy": "weights_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 21.07616007831574,
+          "perplexity_stderr,none": 2.3106853738200654,
+          "acc,none": 0.414,
+          "acc_stderr,none": 0.022049497969827858
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.67,
+          "acc_stderr,none": 0.021049612166134782,
+          "acc_norm,none": 0.642,
+          "acc_norm_stderr,none": 0.021461434862859133
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.376,
+          "acc_stderr,none": 0.02168382753928621,
+          "acc_norm,none": 0.42,
+          "acc_norm_stderr,none": 0.02209471322976179
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 1337,
+      "strategy": "weights_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 16.070229731811548,
+          "perplexity_stderr,none": 1.7991344061406482,
+          "acc,none": 0.478,
+          "acc_stderr,none": 0.02236139673920787
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.68,
+          "acc_stderr,none": 0.02088234048876172,
+          "acc_norm,none": 0.642,
+          "acc_norm_stderr,none": 0.021461434862859133
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.376,
+          "acc_stderr,none": 0.02168382753928621,
+          "acc_norm,none": 0.44,
+          "acc_norm_stderr,none": 0.022221331534143057
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 2024,
+      "strategy": "weights_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 19.54414793622697,
+          "perplexity_stderr,none": 2.1446659354649156,
+          "acc,none": 0.416,
+          "acc_stderr,none": 0.02206494331392886
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.674,
+          "acc_stderr,none": 0.020984009562393675,
+          "acc_norm,none": 0.648,
+          "acc_norm_stderr,none": 0.02138004238594605
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.386,
+          "acc_stderr,none": 0.021793529219281196,
+          "acc_norm,none": 0.424,
+          "acc_norm_stderr,none": 0.022122993778135334
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "downstream_activations_only": [
+    {
+      "seed": 42,
+      "strategy": "activations_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 21.091953173582063,
+          "perplexity_stderr,none": 2.324421233464679,
+          "acc,none": 0.416,
+          "acc_stderr,none": 0.02206494331392886
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.656,
+          "acc_stderr,none": 0.021265758037978793,
+          "acc_norm,none": 0.652,
+          "acc_norm_stderr,none": 0.021323728632807425
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.382,
+          "acc_stderr,none": 0.02175082059125093,
+          "acc_norm,none": 0.434,
+          "acc_norm_stderr,none": 0.02218721580302901
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 1337,
+      "strategy": "activations_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 17.593063808841332,
+          "perplexity_stderr,none": 1.9838555920207497,
+          "acc,none": 0.442,
+          "acc_stderr,none": 0.022231970696321195
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.66,
+          "acc_stderr,none": 0.021206117013673087,
+          "acc_norm,none": 0.65,
+          "acc_norm_stderr,none": 0.021352091786223066
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.38,
+          "acc_stderr,none": 0.021728881438701678,
+          "acc_norm,none": 0.434,
+          "acc_norm_stderr,none": 0.02218721580302901
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 2024,
+      "strategy": "activations_only",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 20.895680865659365,
+          "perplexity_stderr,none": 2.3446758844291713,
+          "acc,none": 0.41,
+          "acc_stderr,none": 0.02201748257812769
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.656,
+          "acc_stderr,none": 0.021265758037978793,
+          "acc_norm,none": 0.64,
+          "acc_norm_stderr,none": 0.02148775108972057
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.38,
+          "acc_stderr,none": 0.021728881438701678,
+          "acc_norm,none": 0.422,
+          "acc_norm_stderr,none": 0.022109039310618563
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    }
+  ],
+  "downstream_both": [
+    {
+      "seed": 42,
+      "strategy": "both",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 21.46563616648409,
+          "perplexity_stderr,none": 2.3437811258080155,
+          "acc,none": 0.412,
+          "acc_stderr,none": 0.02203367799374094
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.644,
+          "acc_stderr,none": 0.021434712356072687,
+          "acc_norm,none": 0.636,
+          "acc_norm_stderr,none": 0.021539170637317653
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.374,
+          "acc_stderr,none": 0.021660710347204473,
+          "acc_norm,none": 0.428,
+          "acc_norm_stderr,none": 0.022149790663861947
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 1337,
+      "strategy": "both",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 17.959703643668995,
+          "perplexity_stderr,none": 2.0458419236141974,
+          "acc,none": 0.446,
+          "acc_stderr,none": 0.022252153078595936
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.674,
+          "acc_stderr,none": 0.020984009562393675,
+          "acc_norm,none": 0.644,
+          "acc_norm_stderr,none": 0.021434712356072687
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.378,
+          "acc_stderr,none": 0.02170655082451827,
+          "acc_norm,none": 0.444,
+          "acc_norm_stderr,none": 0.022242244375731048
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
+    },
+    {
+      "seed": 2024,
+      "strategy": "both",
+      "tasks": [
+        "lambada_openai",
+        "piqa",
+        "hellaswag"
+      ],
+      "limit": 500,
+      "metrics": {
+        "lambada_openai": {
+          "name": "lambada_openai",
+          "alias": "lambada_openai",
+          "sample_len": 500,
+          "perplexity,none": 19.52130511616161,
+          "perplexity_stderr,none": 2.1819373690909654,
+          "acc,none": 0.42,
+          "acc_stderr,none": 0.02209471322976179
+        },
+        "piqa": {
+          "name": "piqa",
+          "alias": "piqa",
+          "sample_len": 500,
+          "acc,none": 0.66,
+          "acc_stderr,none": 0.021206117013673087,
+          "acc_norm,none": 0.65,
+          "acc_norm_stderr,none": 0.021352091786223066
+        },
+        "hellaswag": {
+          "name": "hellaswag",
+          "alias": "hellaswag",
+          "sample_len": 500,
+          "acc,none": 0.376,
+          "acc_stderr,none": 0.02168382753928621,
+          "acc_norm,none": 0.424,
+          "acc_norm_stderr,none": 0.022122993778135334
+        }
+      },
+      "git_commit": "47cca27",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config": "wikitext-2-raw-v1",
+      "max_seq_len": 512,
+      "tokenize_samples": 10000,
+      "eval_subset_size": 1500,
+      "optimizer": "bitsandbytes.optim.AdamW8bit",
+      "gradient_checkpointing": true,
+      "fakequant_weight_scheme": "per_channel_symmetric, qint8, MovingAveragePerChannelMinMaxObserver",
+      "fakequant_activation_scheme": "per_tensor_affine, qint8, MovingAverageMinMaxObserver"
     }
   ]
 }
